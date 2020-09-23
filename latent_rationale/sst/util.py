@@ -1,17 +1,22 @@
+import json
+from dataclasses import dataclass
+from itertools import chain
+from typing import Tuple, List, Union, Set
+
 import os
 import argparse
 import re
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 import numpy as np
 import torch
 import random
 import math
 
+from latent_rationale.common.eraser_utils import annotations_from_jsonl, load_documents
 from latent_rationale.sst.constants import UNK_TOKEN, PAD_TOKEN
 from latent_rationale.sst.plotting import plot_heatmap
 from torch.nn.init import _calculate_fan_in_and_fan_out
 from torch import nn
-
 
 def get_device():
     if torch.cuda.is_available():
@@ -44,7 +49,7 @@ def token_labels_from_treestring(s):
     return list(map(int, re.findall(r"\(([0-9]) [^\(\)]", s)))
 
 
-Example = namedtuple("Example", ["tokens", "label", "token_labels"])
+Example = namedtuple("Example", ["tokens", "label", "token_labels", 'query'])
 
 
 def sst_reader(path, lower=False):
@@ -61,7 +66,7 @@ def sst_reader(path, lower=False):
         label = int(line[1])
         token_labels = token_labels_from_treestring(line)
         assert len(tokens) == len(token_labels), "mismatch tokens/labels"
-        yield Example(tokens=tokens, label=label, token_labels=token_labels)
+        yield Example(tokens=tokens, label=label, token_labels=token_labels, query=None)
 
 
 def print_parameters(model):
@@ -338,5 +343,20 @@ def get_args():
     # misc
     parser.add_argument('--word_vectors', type=str,
                         default='data/sst/glove.840B.300d.sst.txt')
+
+    parser.add_argument('--dataset_name', type=str,
+                        default='sst')
+    parser.add_argument('--data_dir', type=str, default='')
     args = parser.parse_args()
     return args
+
+
+def rectify_labels(dataset):
+    for exp_id, exp in enumerate(dataset):
+        new_label = round((exp.label-1)/3.)
+        new_token_labels = [round((l-1)/3) for l in exp.token_labels]
+        dataset[exp_id] = Example(tokens=exp.tokens,
+                                  query=exp.query,
+                                  label=new_label,
+                                  token_labels=new_token_labels)
+    return dataset

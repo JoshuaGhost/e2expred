@@ -1,0 +1,9 @@
+{
+    "weight_decay": 1e-6,
+    "selection": 1.0,
+    "batch_size": 730,
+    "classes": [
+        "NEG",
+        "POS"
+    ]
+}

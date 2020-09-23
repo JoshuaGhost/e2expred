@@ -7,14 +7,13 @@ from latent_rationale.nn.kuma import Kuma, HardKuma
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-
 class KumaGate(nn.Module):
     """
     Computes a Hard Kumaraswamy Gate
     """
 
     def __init__(self, in_features, out_features=1, support=(-0.1, 1.1),
-                 dist_type="hardkuma"):
+                 dist_type="hardkuma", device=device):
         super(KumaGate, self).__init__()
 
         self.dist_type = dist_type

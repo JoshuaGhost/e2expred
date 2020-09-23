@@ -1,0 +1,48 @@
+{
+    "bert_vocab": "bert-base-uncased",
+    "rebalance_approach": "resampling",
+    "sentence_sampling_method": "whole_document",
+    "merge_evidences": 1,
+    "classes": [
+        "True",
+        "False"
+    ],
+
+    "num_iteration": -10,
+    "patiencs": 3,
+
+    "batch_size": 16,
+    "eval_batch_size": 16,
+    "max_length": 512,
+    "max_grad_norm": 5.0,
+
+    "lr": 1e-5,
+    "min_lr":  1e-6,
+    "lr_decay": 0.5,
+    "threshold": 1e-4,
+    "cooldown": 5,
+
+    "lasso": 0.0,
+    "lagrange_lr": 0.01,
+    "lagrange_alpha": 0.99,
+    "lambda_init":  1e-4,
+
+    "mtl": {
+        "bert_dir": "bert-base-uncased",
+        "warmup_steps": 50,
+        "use_half_precision": 0
+
+    },
+
+    "selector": {
+        "dropout": 0.5,
+        "dependent-z": 0,
+        "dist": "hardkuma"
+    },
+
+    "evidence_classifier": {
+        "bert_dir": "bert-base-uncased",
+        "warmup_steps": 50,
+        "use_half_precision": 0
+    }
+}

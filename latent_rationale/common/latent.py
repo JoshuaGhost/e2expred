@@ -7,39 +7,9 @@ from latent_rationale.common.util import get_encoder
 from latent_rationale.nn.rcnn import RCNNCell
 
 
-class IndependentLatentModel(nn.Module):
-    """
-    The latent model ("The Generator") takes an input text
-    and returns samples from p(z|x)
-    This version uses a reparameterizable distribution, e.g. HardKuma.
-    """
-
-    def __init__(self,
-                 embed:        nn.Embedding = None,
-                 hidden_size:  int = 200,
-                 dropout:      float = 0.1,
-                 layer:        str = "rcnn",
-                 distribution: str = "kuma"
-                 ):
-
-        super(IndependentLatentModel, self).__init__()
-
-        self.layer = layer
-        emb_size = embed.weight.shape[1]
-        enc_size = hidden_size * 2
-
-        self.embed_layer = nn.Sequential(embed, nn.Dropout(p=dropout))
-        self.enc_layer = get_encoder(layer, emb_size, hidden_size)
-
-        if distribution == "kuma":
-            self.z_layer = KumaGate(enc_size)
-        else:
-            raise ValueError("unknown distribution")
-
-        self.z = None      # z samples
-        self.z_dists = []  # z distribution(s)
-
-        self.report_params()
+class IndependentSelector(nn.Module):
+    def __init__(self):
+        super(IndependentSelector, self).__init__()
 
     def report_params(self):
         count = 0
@@ -80,6 +50,42 @@ class IndependentLatentModel(nn.Module):
         self.z_dists = [z_dist]
 
         return z
+
+
+class IndependentLatentModel(IndependentSelector):
+    """
+    The latent model ("The Generator") takes an input text
+    and returns samples from p(z|x)
+    This version uses a reparameterizable distribution, e.g. HardKuma.
+    """
+    def __init__(self,
+                 embed:        nn.Embedding = None,
+                 hidden_size:  int = 200,
+                 dropout:      float = 0.1,
+                 layer:        str = "rcnn",
+                 distribution: str = "kuma"
+                 ):
+
+        super(IndependentLatentModel, self).__init__()
+
+        self.layer = layer
+        emb_size = embed.weight.shape[1]
+        enc_size = hidden_size * 2
+
+        self.embed_layer = nn.Sequential(embed, nn.Dropout(p=dropout))
+        self.enc_layer = get_encoder(layer, emb_size, hidden_size)
+
+        if distribution == "kuma":
+            self.z_layer = KumaGate(enc_size)
+        else:
+            raise ValueError("unknown distribution")
+
+        self.z = None      # z samples
+        self.z_dists = []  # z distribution(s)
+
+        self.report_params()
+
+
 
 
 class DependentLatentModel(nn.Module):

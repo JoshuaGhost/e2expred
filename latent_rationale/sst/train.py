@@ -10,12 +10,14 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 
 from latent_rationale.common.util import make_kv_string
+from latent_rationale.mtl_e2e.utils import numerify_labels, tokenize_query_doc  # , combine_query_doc
 from latent_rationale.sst.vocabulary import Vocabulary
 from latent_rationale.sst.models.model_helpers import build_model
 from latent_rationale.sst.util import get_args, sst_reader, \
     prepare_minibatch, get_minibatch, load_glove, print_parameters, \
-    initialize_model_, get_device
+    initialize_model_, get_device, rectify_labels
 from latent_rationale.sst.evaluate import evaluate
+from latent_rationale.common.eraser_utils import load_eraser_data
 
 device = get_device()
 print("device:", device)
@@ -38,14 +40,31 @@ def train():
     batch_size = cfg["batch_size"]
     eval_batch_size = cfg.get("eval_batch_size", batch_size)
 
+    dataset_name = cfg['dataset_name']
+
     print("Loading data")
-    train_data = list(sst_reader("data/sst/train.txt"))
-    dev_data = list(sst_reader("data/sst/dev.txt"))
-    test_data = list(sst_reader("data/sst/test.txt"))
+    if dataset_name == 'sst':
+        train_data = list(sst_reader("data/sst/train.txt"))
+        dev_data = list(sst_reader("data/sst/dev.txt"))
+        test_data = list(sst_reader("data/sst/test.txt"))
+        train_data, dev_data, test_data = [rectify_labels(dataset) for dataset in [train_data, dev_data, test_data]]
+    elif dataset_name in ['movies', 'fever', 'multirc']:
+        # with open(f'parameters/{dataset_name}_bastings.json', 'r') as fin:
+        #     params = json.load(fin)
+        data_dir = cfg['data_dir']
+        params = dict()
+        params['classes'] = ['NEG', 'POS']
+        # print(params)
+        # cfg['selection'] = params['selection']
+        # cfg['batch_size'] = params['batch_size']
+        # cfg['weight_decay'] = params['weight_decay']
+        # cfg['save_path'] = cfg['save_path'] + f"{dataset_name}/bastings_latent_{round(cfg['selection']*100)}pct"
+        data_dir = os.path.join(data_dir, dataset_name)
+        train_data, dev_data, orig_test_data = load_eraser_data(data_dir, True)
 
     print("train", len(train_data))
     print("dev", len(dev_data))
-    print("test", len(test_data))
+    print("test", len(orig_test_data))
 
     iters_per_epoch = len(train_data) // cfg["batch_size"]
 
@@ -69,8 +88,20 @@ def train():
     vectors = load_glove(glove_path, vocab)
 
     # Map the sentiment labels 0-4 to a more readable form (and the opposite)
-    i2t = ["very negative", "negative", "neutral", "positive", "very positive"]
-    t2i = OrderedDict({p: i for p, i in zip(i2t, range(len(i2t)))})
+    if dataset_name == 'sst':
+        i2t = ["very negative", "negative", "neutral", "positive", "very positive"]
+        t2i = OrderedDict({p: i for p, i in zip(i2t, range(len(i2t)))})
+    else:
+        i2t = params['classes']
+        t2i = OrderedDict({k: v for v, k in enumerate(i2t)})
+        from nltk.tokenize import NLTKWordTokenizer
+        tokenizer = NLTKWordTokenizer()
+        train_data, dev_data, test_data = [numerify_labels(dataset, t2i)
+                                           for dataset in [train_data, dev_data, orig_test_data]]
+
+        train_data, dev_data, test_data = [[tokenize_query_doc(example, tokenizer) for example in dataset]
+                                           for dataset in [train_data, dev_data, test_data]]
+
 
     # Build model
     model = build_model(cfg["model"], vocab, t2i, cfg)
