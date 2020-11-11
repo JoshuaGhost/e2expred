@@ -1,0 +1,12 @@
+Universe = vanilla
+executable = /bin/bash
+arguments =-i /home/zzhang/workspace/end_to_end_interpretable_predictions/scripts/fever_sweep_0.2_0.9.sh
+
+output = /home/zzhang/workspace/end_to_end_interpretable_predictions/logs/fever_sweep_0.2_0.9.out
+error = /home/zzhang/workspace/end_to_end_interpretable_predictions/logs/fever_sweep_0.2_0.9.err
+log = /home/zzhang/workspace/end_to_end_interpretable_predictions/logs/fever_sweep_0.2_0.9.log
+
+request_gpus=1
++GPUJobLength="long"
+request_memory = 80 GB
+Queue
