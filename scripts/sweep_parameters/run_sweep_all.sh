@@ -14,6 +14,23 @@ then
 	rm logs/sweep_movies.${split}.std*
 fi
 
+#for w_exp in "${w_exps[@]}"
+#do
+#	date >> logs/sweep_fever.dev.stdout
+#	date >> logs/sweep_fever.dev.stderr
+#	CUDA_VISIBLE_DEVICES=$GPU_NUM PYTHONPATH=$PYTHONPATH:./ python latent_rationale/e2expred/train.py --conf_fname ./parameters/fever_e2expred.json --dataset_name fever --w_aux 1.0 --w_exp $w_exp --data_dir ../data --save_path ./results/e2expred/separate_encoder_cold_start --batch_size 13 --train_on_part 0.1 --decode_split dev 1>>logs/sweep_fever.dev.stdout 2>>logs/sweep_fever.dev.stderr
+#	date >> logs/sweep_fever.dev.stdout
+#	date >> logs/sweep_fever.dev.stderr
+#done
+#
+#for w_exp in "${w_exps[@]}"
+#do
+#	date >> logs/sweep_multirc.dev.stdout
+#	date >> logs/sweep_multirc.dev.stderr
+#	CUDA_VISIBLE_DEVICES=$GPU_NUM PYTHONPATH=$PYTHONPATH:./ python latent_rationale/e2expred/train.py --conf_fname ./parameters/multirc_e2expred.json --dataset_name multirc --w_aux 1.0 --w_exp $w_exp --data_dir ../data --save_path ./results/e2expred/separate_encoder_cold_start --batch_size 13 --train_on_part 0.4 --decode_split dev 1>>logs/sweep_multirc.dev.stdout 2>>logs/sweep_multirc.dev.stderr
+#	date >> logs/sweep_multirc.dev.stdout
+#	date >> logs/sweep_multirc.dev.stderr
+#done
 dataset=movies
 for w_exp in "${w_exps[@]}"
 do
@@ -21,8 +38,7 @@ do
 	echo ${w_exp} >> logs/sweep_movies.${split}.stderr
 	date >> logs/sweep_movies.${split}.stdout
 	date >> logs/sweep_movies.${split}.stderr
-	CUDA_VISIBLE_DEVICES=$GPU_NUM PYTHONPATH=$PYTHONPATH:./ python latent_rationale/mtl_e2e/train.py --conf_fname ./parameters/${dataset}_e2expred.json --dataset_name ${dataset} --w_aux 1.0 --w_exp $w_exp --data_dir ../data --save_path ./results/e2expred/separate_encoder_cold_start --batch_size 13 1>>logs/sweep_${dataset}.${split}.stdout 2>>logs/sweep_${dataset}.${split}.stderr
+	CUDA_VISIBLE_DEVICES=$GPU_NUM PYTHONPATH=$PYTHONPATH:./ python latent_rationale/e2expred/train.py --conf_fname ./parameters/${dataset}_e2expred.json --dataset_name ${dataset} --w_aux 1.0 --w_exp $w_exp --data_dir ../data --save_path ./results/e2expred/separate_encoder_cold_start --batch_size 13 --decode_split ${split} 1>>logs/sweep_${dataset}.${split}.stdout 2>>logs/sweep_${dataset}.${split}.stderr
 	date >> logs/sweep_${dataset}.${split}.stdout
 	date >> logs/sweep_${dataset}.${split}.stderr
 done
-
