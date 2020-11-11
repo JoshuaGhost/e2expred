@@ -62,6 +62,7 @@ def train():
         lasso = f'_lasso_{ch}'
     else:
         lasso = '_no_coherence'
+
     def get_modelname_component(conf, entry, entry_as_comp=False):
         value = conf.get(entry, None)
         if value is None:
@@ -76,14 +77,17 @@ def train():
                 ret = '_' + entry
             else:
                 ret = ''
+        elif isinstance(value, int) or isinstance(value, float):
+            ret = f'_{entry}_{value}'
         return ret
+
     weights_scheduler = get_modelname_component(conf, 'weights_scheduler')
     share_encoder = get_modelname_component(conf, 'share_encoder')
     warm_start_mtl = get_modelname_component(conf, 'warm_start_mtl', True)
     warm_start_cls = get_modelname_component(conf, 'warm_start_cls', True)
     exp_threshold = get_modelname_component(conf, 'exp_threshold')
     soft_selection = get_modelname_component(conf, 'soft_selection', True)
-    num_epochs = f"_{-num_iterations}_epochs"
+    num_epochs = f"_epochs_{-num_iterations}"
 
     w_aux = conf['weights'].get('w_aux', None)
     if w_aux is not None:
@@ -93,10 +97,10 @@ def train():
         w_exp = 1.
         conf['weights']['w_aux'] = 1.
         conf['weights']['w_exp'] = 1.
-    ws_mtl = f"_waux_{w_aux}_wcls_{w_exp}"
+    ws_mtl = f"_waux_{w_aux}_wexp_{w_exp}"
 
     save_path = conf['save_path'] + \
-                f"{dataset_name}/mtl_e2e" + \
+                f"/{dataset_name}/mtl_e2e" + \
                 l0 + lasso + \
                 weights_scheduler + \
                 ws_mtl + \
@@ -104,7 +108,7 @@ def train():
                 warm_start_mtl + \
                 warm_start_cls + \
                 exp_threshold + \
-                soft_selection +\
+                soft_selection + \
                 num_epochs
     print(os.path.abspath(save_path))
     data_dir = conf['data_dir']

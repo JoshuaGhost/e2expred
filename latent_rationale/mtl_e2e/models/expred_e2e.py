@@ -108,9 +108,11 @@ class HardKumaE2E(nn.Module):
             if self.weights_scheduler == 'parabolic':
                 # This weights scheduler is inspired by the paper
                 # https://arxiv.org/abs/1912.02413
-                w_aux = 1 - (float(epoch - 1) / self.epochs_total) ** 2
-                w_exp = w_aux
-                w_cls = 1 - w_aux
+                decay_identifier = 1 - (float(epoch - 1) / self.epochs_total) ** 2
+                decay_classifier = 1 - decay_identifier
+                w_aux *= decay_identifier
+                w_exp *= decay_classifier
+                w_cls *= decay_identifier
             elif self.scheduling == 'static':
                 w_aux = weights['aux']
                 w_exp = weights['exp']
@@ -120,7 +122,7 @@ class HardKumaE2E(nn.Module):
         # print(self.training, self.epochs_total, epoch)
 
         loss_aux = self.auxilliary_criterion(p_aux, t_cls).mean()
-        optional['aux_acc'] = accuracy_score(p_aux.cpu().argmax(axis=-1), t_cls.cpu())
+        optional['aux_acc'] = accuracy_score(t_cls.cpu(), p_aux.cpu().argmax(axis=-1).detach())
         optional["aux_loss"] = loss_aux.item()
         loss = w_aux * loss_aux
 
@@ -132,7 +134,7 @@ class HardKumaE2E(nn.Module):
         loss += w_exp * loss_exp
 
         loss_cls = self.final_cls_criterion(p_cls, t_cls).mean()
-        optional['cls_acc'] = accuracy_score(p_cls.cpu().argmax(axis=-1), t_cls.cpu())
+        optional['cls_acc'] = accuracy_score(t_cls.cpu(), p_cls.cpu().argmax(axis=-1).detach())
         optional["cls_loss"] = loss_cls.item()
         loss += w_cls * loss_cls
 

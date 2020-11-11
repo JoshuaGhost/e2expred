@@ -117,19 +117,23 @@ def get_args():
     # parser.add_argument('--selection', type=float, default=1.,
     #                     help="Target text selection rate for Lagrange.")
 
+    parser.add_argument('--w_aux', type=float)
+    parser.add_argument('--w_exp', type=float)
+    parser.add_argument('--selection', type=float)
+    parser.add_argument('--batch_size', type=int)
 
     args = parser.parse_args()
     args = vars(args)
     conf_fname = args['conf_fname']
-    import os
-    print(os.path.abspath('.'))
     with open(conf_fname, 'r') as fin:
         conf = json.load(fin)
+    print(args.keys())
     for k, v in args.items():
-        if k == 'selection':
-            conf['weights']['selection'] = v
+        if k in ('selection', 'w_aux', 'w_exp') and v is not None: # weights in args overwrites the ones on conf file
+            conf['weights'][k] = v
         else:
             conf[k] = v
+    conf["eval_batch_size"] = conf['batch_size']
     return conf
 
 

@@ -9,15 +9,14 @@
     ],
 
     "weights_scheduler": "parabolic",
-    "num_iterations": -20,
+    "num_iterations": -30,
     "patience": 3,
 
-    "batch_size": 6,
-    "eval_batch_size": 13,
+    "batch_size": 1,
     "max_grad_norm": 5.0,
 
-    "lr": 1e-4,
-    "min_lr":  1e-6,
+    "lr": 1e-05,
+    "min_lr":  1e-06,
     "lr_decay": 0.5,
     "threshold": 1e-4,
     "cooldown": 5,
@@ -32,7 +31,7 @@
     "weights": {
         "w_aux": 1.0,
         "w_exp": 1.0,
-        "selection": 1.0,
+        "selection": 0.3,
         "lasso": 0.0,
         "lagrange_lr": 0.01,
         "lagrange_alpha": 0.99
