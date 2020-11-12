@@ -128,7 +128,7 @@ def print_parameters(model):
     print("\nTotal parameters: {}\n".format(total))
 
 
-def get_minibatch(data, batch_size, shuffle=False):
+def get_minibatch(data, batch_size, shuffle=False, train_on_part=-1):
     """Return minibatches, optional shuffling"""
     if shuffle:
         print("Shuffling training data")
@@ -137,7 +137,12 @@ def get_minibatch(data, batch_size, shuffle=False):
     batch = []
 
     # yield minibatches
-    for example in data:
+    if train_on_part == -1:
+        data_to_return = data
+    else:
+        data_to_return = data[:int(len(data) * train_on_part)]
+
+    for example in data_to_return:
         batch.append(example)
 
         if len(batch) == batch_size:
@@ -147,6 +152,27 @@ def get_minibatch(data, batch_size, shuffle=False):
     # in case there is something left
     if len(batch) > 0:
         yield batch
+
+
+# def get_minibatch(data, batch_size, shuffle=False):
+#     """Return minibatches, optional shuffling"""
+#     if shuffle:
+#         print("Shuffling training data")
+#         random.shuffle(data)  # shuffle training data each epoch
+#
+#     batch = []
+#
+#     # yield minibatches
+#     for example in data:
+#         batch.append(example)
+#
+#         if len(batch) == batch_size:
+#             yield batch
+#             batch = []
+#
+#     # in case there is something left
+#     if len(batch) > 0:
+#         yield batch
 
 
 def write_jsonl(jsonl, output_file):

@@ -33,6 +33,11 @@ def train():
     torch.backends.cudnn.benchmark = False
     np.random.seed(87654321)
     random.seed(32767)
+    # torch.manual_seed(114514)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+    # np.random.seed(114514)
+    # random.seed(114514)
 
     conf = get_args()
 
@@ -51,6 +56,9 @@ def train():
     t2i = OrderedDict({k: v for v, k in enumerate(i2t)})
     conf['mtl']['num_labels'] = len(i2t)
     conf['classifier']['num_labels'] = len(i2t)
+
+    train_on_part = conf['train_on_part']
+    decode_split = conf['decode_split']
 
     print("Loading data")
     if conf['lambda_init'] > 0.:
@@ -117,19 +125,21 @@ def train():
     if os.path.isfile(cache_dir):
         print(f'Preprocessed dataset found at {cache_dir}, loading...')
         with open(cache_dir, 'rb') as fin:
-            train_data, dev_data, test_data, orig_test_data = pickle.load(fin)
+            train_data, dev_data, test_data, \
+            orig_train_data, orig_dev_data, orig_test_data = pickle.load(fin)
     else:
         print("Preprocessing the dataset for the first time.")
         os.makedirs(save_path, exist_ok=True)
         merge_evidences = bool(conf.get('merge_evidences', 0))
-        train_data, dev_data, orig_test_data = load_eraser_data(data_dir, merge_evidences)
+        orig_train_data, orig_dev_data, orig_test_data = load_eraser_data(data_dir, merge_evidences)
         train_data, dev_data, test_data = [numerify_labels(dataset, t2i)
-                                           for dataset in [train_data, dev_data, orig_test_data]]
+                                           for dataset in [orig_train_data, orig_dev_data, orig_test_data]]
 
         train_data, dev_data, test_data = [[tokenize_query_doc(example, tokenizer) for example in dataset]
                                            for dataset in [train_data, dev_data, test_data]]
         with open(cache_dir, "wb+") as fout:
-            pickle.dump((train_data, dev_data, test_data, orig_test_data), fout)
+            pickle.dump((train_data, dev_data, test_data,
+                         orig_train_data, orig_dev_data, orig_test_data), fout)
         print(f'preprocessed dataset dumped at {cache_dir}')
 
     print("#train: ", len(train_data))
@@ -149,10 +159,10 @@ def train():
         num_iterations = iters_per_epoch * -1 * conf["num_iterations"]
         print("Set num_iterations to {}".format(num_iterations))
 
-    example = dev_data[0]
-    print("First train example:", example)
-    print("First train example tokens:", example.tokens)
-    print("First train example label:", example.label)
+    # example = dev_data[0]
+    # print("First train example:", example)
+    # print("First train example tokens:", example.tokens)
+    # print("First train example label:", example.label)
 
     writer = SummaryWriter(log_dir=save_path)  # TensorBoard
 
@@ -199,7 +209,8 @@ def train():
         losses = ckpt['losses']
 
     while True:  # when we run out of examples, shuffle and continue
-        for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True):
+        for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True, train_on_part=train_on_part):
+        # for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True):
             # done training
             if iter_i == num_iterations:
                 print("# Done training")
@@ -245,8 +256,17 @@ def train():
                 with open(result_path, mode="w") as f:
                     json.dump(conf, f)
 
+                if decode_split == 'train':
+                    data = train_data
+                    orig_data = orig_train_data
+                elif decode_split == 'dev':
+                    data = dev_data
+                    orig_data = orig_dev_data
+                elif decode_split == 'test':
+                    data = test_data
+                    orig_data = orig_test_data
                 cls_pred_p, soft_exp_pred, hard_exp_pred = predict(
-                    model, test_data, tokenizer,
+                    model, data, tokenizer,
                     batch_size=eval_batch_size,
                     max_length=512, device=device
                 )
@@ -254,8 +274,19 @@ def train():
                                 for p_cls_p, soft_exp_p, hard_exp_p, ot in zip(cls_pred_p,
                                                                                soft_exp_pred,
                                                                                hard_exp_pred,
-                                                                               orig_test_data)]
-                write_jsonl(test_decoded, os.path.join(save_path, 'test_decoded.jsonl'))
+                                                                               orig_data)]
+                write_jsonl(test_decoded, os.path.join(save_path, f'{decode_split}_decoded.jsonl'))
+                # cls_pred_p, soft_exp_pred, hard_exp_pred = predict(
+                #     model, test_data, tokenizer,
+                #     batch_size=eval_batch_size,
+                #     max_length=512, device=device
+                # )
+                # test_decoded = [convert_to_eraser_json(p_cls_p, soft_exp_p, hard_exp_p, ot, tokenizer, i2t)
+                #                 for p_cls_p, soft_exp_p, hard_exp_p, ot in zip(cls_pred_p,
+                #                                                                soft_exp_pred,
+                #                                                                hard_exp_pred,
+                #                                                                orig_test_data)]
+                # write_jsonl(test_decoded, os.path.join(save_path, f'test_decoded.jsonl'))
                 return losses, metrics
 
             epoch = iter_i // iters_per_epoch

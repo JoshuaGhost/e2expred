@@ -122,18 +122,20 @@ def get_args():
     parser.add_argument('--selection', type=float)
     parser.add_argument('--batch_size', type=int)
 
+    parser.add_argument('--train_on_part', type=float, default='-1')
+    parser.add_argument('--decode_split', type=str, default='test')
     args = parser.parse_args()
     args = vars(args)
     conf_fname = args['conf_fname']
     with open(conf_fname, 'r') as fin:
         conf = json.load(fin)
     print(args.keys())
-    for k, v in args.items():
-        if k in ('selection', 'w_aux', 'w_exp') and v is not None: # weights in args overwrites the ones on conf file
+    for k, v in args.items(): # values in args overwrites the ones on conf file
+        if k in ('selection', 'w_aux', 'w_exp') and v is not None:
             conf['weights'][k] = v
         else:
             conf[k] = v
-    conf["eval_batch_size"] = conf['batch_size']
+    conf["eval_batch_size"] = max(conf['batch_size'], conf['eval_batch_size'])
     return conf
 
 
