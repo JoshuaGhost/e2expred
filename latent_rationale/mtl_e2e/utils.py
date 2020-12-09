@@ -131,7 +131,9 @@ def get_args():
         conf = json.load(fin)
     print(args.keys())
     for k, v in args.items(): # values in args overwrites the ones on conf file
-        if k in ('selection', 'w_aux', 'w_exp') and v is not None:
+        if v is None:
+            continue
+        if k in ('selection', 'w_aux', 'w_exp'):
             conf['weights'][k] = v
         else:
             conf[k] = v
