@@ -9,7 +9,7 @@
     ],
 
     "weights_scheduler": "parabolic",
-    "num_iterations": -30,
+    "num_iterations": -20,
     "patience": 3,
 
     "batch_size": 1,

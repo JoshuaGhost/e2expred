@@ -111,8 +111,8 @@ class HardKumaE2E(nn.Module):
                 decay_identifier = 1 - (float(epoch - 1) / self.epochs_total) ** 2
                 decay_classifier = 1 - decay_identifier
                 w_aux *= decay_identifier
-                w_exp *= decay_classifier
-                w_cls *= decay_identifier
+                w_exp *= decay_identifier
+                w_cls *= decay_classifier
             elif self.scheduling == 'static':
                 w_aux = weights['aux']
                 w_exp = weights['exp']
