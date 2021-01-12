@@ -12,7 +12,8 @@
     "num_iterations": -20,
     "patience": 3,
 
-    "batch_size": 1,
+    "batch_size": 13,
+    "eval_batch_size": 26,
     "max_grad_norm": 5.0,
 
     "lr": 1e-05,
