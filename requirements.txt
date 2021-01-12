@@ -1,6 +1,5 @@
 nltk==3.5
 numpy==1.16.2
-pygpu==0.7.6
 pytest==6.0.1
 pytorch-pretrained-bert==0.6.2
 pytorch-transformers==1.1.0
