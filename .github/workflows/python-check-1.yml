@@ -5,9 +5,11 @@ name: python_check_1
 
 on:
   push:
-    branches: [ dev ]
+    branches: 
+      - '*'
   pull_request:
-    branches: [ dev ]
+    branches:
+      - '*'
 
 jobs:
   build:
