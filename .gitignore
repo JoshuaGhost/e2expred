@@ -1,4 +1,6 @@
 .idea
+*.orig
+temp/*
 .venv3/*
 .venv3_backup/*
 logs/*
