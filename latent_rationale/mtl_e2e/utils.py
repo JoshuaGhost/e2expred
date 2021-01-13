@@ -101,7 +101,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='End to End ExPred')
     parser.add_argument('--conf_fname', type=str)
 
-    parser.add_argument('--dataset_name', type=str, choices=['movies', 'fever', 'multirc'])
+    parser.add_argument('--dataset_name', type=str, choices=['movies', 'fever', 'multirc', 'short_movies'])
     parser.add_argument('--data_dir', type=str, default='')
     parser.add_argument('--save_path', type=str, default='mtl_e2e/default')
     parser.add_argument('--resume_snapshot', type=bool, default=True)

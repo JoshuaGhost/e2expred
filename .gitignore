@@ -1,4 +1,6 @@
 .idea
+.venv3/*
+.venv3_backup/*
 logs/*
 data/
 .DS_Store

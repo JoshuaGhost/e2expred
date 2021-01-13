@@ -108,8 +108,8 @@ class HardKumaE2E(nn.Module):
             if self.weights_scheduler == 'parabolic':
                 # This weights scheduler is inspired by the paper
                 # https://arxiv.org/abs/1912.02413
-                decay_identifier = 1 - (float(epoch - 1) / self.epochs_total) ** 2
-                decay_classifier = 1 - decay_identifier
+                decay_classifier = (float(epoch - 1) / self.epochs_total) ** 2
+                decay_identifier = 1 - decay_classifier
                 w_aux *= decay_identifier
                 w_exp *= decay_identifier
                 w_cls *= decay_classifier
