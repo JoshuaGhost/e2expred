@@ -102,12 +102,12 @@ def get_args():
     parser.add_argument('--conf_fname', type=str)
 
     parser.add_argument('--dataset_name', type=str, choices=['movies', 'fever', 'multirc', 'short_movies'])
-    parser.add_argument('--data_dir', type=str, default='')
-    parser.add_argument('--save_path', type=str, default='mtl_e2e/default')
+    parser.add_argument('--data_dir', type=str)
+    parser.add_argument('--save_path', type=str)
     parser.add_argument('--resume_snapshot', type=bool, default=True)
     parser.add_argument('--warm_start_mtl', type=str)
     parser.add_argument('--warm_start_cls', type=str)
-    parser.add_argument('--share_encoder', default=False, action='store_true')
+    parser.add_argument('--share_encoder', action='store_true')
 
     parser.add_argument('--print_every', type=int, default=100)
     parser.add_argument('--eval_every', type=int, default=-1)
@@ -124,12 +124,13 @@ def get_args():
 
     parser.add_argument('--train_on_part', type=float, default='-1')
     parser.add_argument('--decode_split', type=str, default='test')
+    parser.add_argument('--debug', default=False, action="store_true")
     args = parser.parse_args()
     args = vars(args)
     conf_fname = args['conf_fname']
     with open(conf_fname, 'r') as fin:
         conf = json.load(fin)
-    print(args.keys())
+
     for k, v in args.items(): # values in args overwrites the ones on conf file
         if v is None:
             continue
@@ -138,6 +139,12 @@ def get_args():
         else:
             conf[k] = v
     conf["eval_batch_size"] = max(conf['batch_size'], conf['eval_batch_size'])
+
+    if conf['debug']:
+        conf['save_path'] += '/debug/'
+        conf['dataset_name'] = 'short_movies'
+        conf['num_iterations'] = -5
+
     return conf
 
 

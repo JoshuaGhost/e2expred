@@ -3,6 +3,9 @@
     "rebalance_approach": "resampling",
     "sentence_sampling_method": "whole_document",
     "merge_evidences": 1,
+    "data_dir": "datasets/",
+
+    "dataset_name": "movies",
     "classes": [
         "NEG",
         "POS"
@@ -66,5 +69,7 @@
             "dropout": 0.1,
             "dim_hidden": 256
         }
-    }
+    },
+    "save_path": "results_oldstate/mtl_e2e/shared_encoder_cold_start/",
+    "share_encoder": true
 }
