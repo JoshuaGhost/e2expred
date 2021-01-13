@@ -2,8 +2,10 @@ import argparse
 import json
 from dataclasses import dataclass
 from typing import List, Any
+
+import copy
 import torch
-import numpy as np
+from latent_rationale.mtl_e2e.config import E2ExPredConfig
 
 from torch.nn.utils.rnn import pad_sequence, PackedSequence, pack_padded_sequence, pad_packed_sequence
 from transformers import BertTokenizer
@@ -113,10 +115,6 @@ def get_args():
     parser.add_argument('--eval_every', type=int, default=-1)
     parser.add_argument('--save_every', type=int, default=-1)
 
-    # rationale settings for HardKuma model
-    # parser.add_argument('--selection', type=float, default=1.,
-    #                     help="Target text selection rate for Lagrange.")
-
     parser.add_argument('--w_aux', type=float)
     parser.add_argument('--w_exp', type=float)
     parser.add_argument('--selection', type=float)
@@ -124,7 +122,6 @@ def get_args():
 
     parser.add_argument('--train_on_part', type=float, default='-1')
     parser.add_argument('--decode_split', type=str, default='test')
-    parser.add_argument('--debug', default=False, action="store_true")
     args = parser.parse_args()
     args = vars(args)
     conf_fname = args['conf_fname']
@@ -140,12 +137,20 @@ def get_args():
             conf[k] = v
     conf["eval_batch_size"] = max(conf['batch_size'], conf['eval_batch_size'])
 
-    if conf['debug']:
-        conf['save_path'] += '/debug/'
-        conf['dataset_name'] = 'short_movies'
-        conf['num_iterations'] = -5
+    conf['model_common']['num_labels'] = len(conf['classes'])
 
-    return conf
+    mtl_conf = copy.deepcopy(conf['model_common'])
+    if 'mtl' in conf:
+        mtl_conf.update(conf['mtl'])
+    conf['mtl'] = mtl_conf
+
+    cls_conf = copy.deepcopy(conf['model_common'])
+    if 'cls' in conf:
+        cls_conf.update(conf['cls'])
+    conf['cls'] = cls_conf
+
+    model_conf = E2ExPredConfig(conf)
+    return conf, model_conf
 
 
 def prepare_minibatch(mb: List[Example],

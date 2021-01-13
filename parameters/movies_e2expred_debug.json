@@ -1,6 +1,9 @@
 {
+    "data_dir": "datasets/",
     "bert_vocab": "bert-base-uncased",
     "rebalance_approach": "resampling",
+    "dataset_name": "short_movies",
+
     "sentence_sampling_method": "whole_document",
     "merge_evidences": 1,
     "classes": [
@@ -8,28 +11,36 @@
         "POS"
     ],
 
-    "num_iterations": -20,
+    "weights_scheduler": "parabolic",
+    "epochs_total": 5,
     "patience": 3,
 
-    "batch_size": 7,
-    "eval_batch_size": 3,
+    "batch_size": 13,
+    "eval_batch_size": 26,
     "max_grad_norm": 5.0,
 
-    "lr": 1e-5,
-    "min_lr":  1e-6,
+    "lr": 1e-05,
+    "min_lr":  1e-06,
     "lr_decay": 0.5,
-    "threshold": 1e-4,
+    "improvement_threshold": 1e-4,
     "cooldown": 5,
     "weight_decay": 1e-5,
     "lambda_init":  1e-4,
+    "lambda_min": 1e-12,
+    "lambda_max": 5.0,
+
+    "soft_selection": false,
 
     "weights": {
+        "w_aux": 1.0,
+        "w_exp": 1.0,
+        "selection": 0.3,
         "lasso": 0.0,
         "lagrange_lr": 0.01,
         "lagrange_alpha": 0.99
     },
 
-    "mtl": {
+    "model_common": {
         "bert_dir": "bert-base-uncased",
         "warmup_steps": 50,
         "use_half_precision": 0,
@@ -40,22 +51,13 @@
         }
     },
 
-    "selector_type": "hard binary",
-
     "selector": {
+        "selector_type": "hard binary",
         "dropout": 0.5,
         "dependent-z": 0,
+        "exp_threshold": 0.5,
         "dist": "kuma"
     },
 
-    "classifier": {
-        "bert_dir": "bert-base-uncased",
-        "warmup_steps": 50,
-        "use_half_precision": 0,
-        "max_length": 512,
-        "cls_head": {
-            "dropout": 0.1,
-            "dim_hidden": 256
-        }
-    }
+    "save_path": "results/mtl_e2e/separate_encoder_cold_start/"
 }

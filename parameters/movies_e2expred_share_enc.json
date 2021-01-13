@@ -1,18 +1,18 @@
 {
+    "data_dir": "datasets/",
     "bert_vocab": "bert-base-uncased",
     "rebalance_approach": "resampling",
+    "dataset_name": "movies",
+
     "sentence_sampling_method": "whole_document",
     "merge_evidences": 1,
-    "data_dir": "datasets/",
-
-    "dataset_name": "movies",
     "classes": [
         "NEG",
         "POS"
     ],
 
     "weights_scheduler": "parabolic",
-    "num_iterations": -20,
+    "epochs_total": 20,
     "patience": 3,
 
     "batch_size": 13,
@@ -22,14 +22,13 @@
     "lr": 1e-05,
     "min_lr":  1e-06,
     "lr_decay": 0.5,
-    "threshold": 1e-4,
+    "improvement_threshold": 1e-4,
     "cooldown": 5,
     "weight_decay": 1e-5,
     "lambda_init":  1e-4,
     "lambda_min": 1e-12,
     "lambda_max": 5.0,
 
-    "exp_threshold": 0.5,
     "soft_selection": false,
 
     "weights": {
@@ -41,7 +40,7 @@
         "lagrange_alpha": 0.99
     },
 
-    "mtl": {
+    "model_common": {
         "bert_dir": "bert-base-uncased",
         "warmup_steps": 50,
         "use_half_precision": 0,
@@ -52,24 +51,14 @@
         }
     },
 
-    "selector_type": "hard binary",
-
     "selector": {
+        "selector_type": "hard binary",
         "dropout": 0.5,
         "dependent-z": 0,
+        "exp_threshold": 0.5,
         "dist": "kuma"
     },
 
-    "classifier": {
-        "bert_dir": "bert-base-uncased",
-        "warmup_steps": 50,
-        "use_half_precision": 0,
-        "max_length": 512,
-        "cls_head": {
-            "dropout": 0.1,
-            "dim_hidden": 256
-        }
-    },
-    "save_path": "results_oldstate/mtl_e2e/shared_encoder_cold_start/",
+    "save_path": "results/mtl_e2e/shared_encoder_cold_start/",
     "share_encoder": true
 }

@@ -27,17 +27,16 @@ class HardKumaE2E(nn.Module):
 
         bert_ebd_dims = self.bert_mtl.bert_model.config.hidden_size
         selector_params = cfg['selector']
-        selector_type = cfg['selector_type']
-        if selector_type == 'hard binary':
+        if selector_params['selector_type'] == 'hard binary':
             self.rationale_selector = KumaSelectorLayer(selector_params,
                                                         repr_size=bert_ebd_dims)
         else:
             raise NotImplementedError
         from latent_rationale.common.losses import resampling_rebalanced_crossentropy
         self.exp_criterion = resampling_rebalanced_crossentropy(seq_reduction='mean')
-        self.exp_threshold = cfg.get('exp_threshold', 0.5)
+        self.exp_threshold = selector_params.get('exp_threshold', 0.5)
 
-        classifier_params = cfg['classifier']
+        classifier_params = cfg['cls']
         self.shared_encoder = cfg.get('share_encoder', False)
         if self.shared_encoder:
             self.classifier = self.bert_mtl

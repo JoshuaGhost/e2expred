@@ -26,6 +26,8 @@ from latent_rationale.mtl_e2e.predict import predict
 device = get_device()
 print("device:", device)
 
+verbose = False
+
 
 def train():
     torch.manual_seed(12345678)
@@ -39,25 +41,20 @@ def train():
     # np.random.seed(114514)
     # random.seed(114514)
 
-    conf = get_args()
+    conf, model_conf = get_args()
 
-    for k, v in conf.items():
-        print(f"{k:20} : {str(v):10}")
-
-    num_iterations = conf["num_iterations"]
-    print_every = conf["print_every"]
+    print(conf)
 
     batch_size = conf["batch_size"]
     eval_batch_size = conf.get("eval_batch_size", batch_size)
 
     dataset_name = conf['dataset_name']
     tokenizer = BertTokenizer.from_pretrained(conf['bert_vocab'])
-    i2t = conf['classes']
-    t2i = OrderedDict({k: v for v, k in enumerate(i2t)})
-    conf['mtl']['num_labels'] = len(i2t)
-    conf['classifier']['num_labels'] = len(i2t)
+    label_id_to_name = conf['classes']
+    label_name_to_id = OrderedDict({k: v for v, k in enumerate(label_id_to_name)})
+    conf['model_common']['num_labels'] = len(label_id_to_name)
 
-    train_on_part = conf['train_on_part']
+    # train_on_part = conf['train_on_part']
     decode_split = conf['decode_split']
 
     print("Loading data")
@@ -89,13 +86,15 @@ def train():
             ret = f'_{entry}_{value}'
         return ret
 
+    epochs_total = conf['epochs_total']
+
     weights_scheduler = get_modelname_component(conf, 'weights_scheduler')
     share_encoder = get_modelname_component(conf, 'share_encoder')
     warm_start_mtl = get_modelname_component(conf, 'warm_start_mtl', True)
     warm_start_cls = get_modelname_component(conf, 'warm_start_cls', True)
     exp_threshold = get_modelname_component(conf, 'exp_threshold')
     soft_selection = get_modelname_component(conf, 'soft_selection', True)
-    num_epochs = f"_epochs_{-num_iterations}"
+    num_epochs = f"_epochs_{epochs_total}"
 
     w_aux = conf['weights'].get('w_aux', None)
     if w_aux is not None:
@@ -132,7 +131,7 @@ def train():
         os.makedirs(save_path, exist_ok=True)
         merge_evidences = bool(conf.get('merge_evidences', 0))
         orig_train_data, orig_dev_data, orig_test_data = load_eraser_data(data_dir, merge_evidences)
-        train_data, dev_data, test_data = [numerify_labels(dataset, t2i)
+        train_data, dev_data, test_data = [numerify_labels(dataset, label_name_to_id)
                                            for dataset in [orig_train_data, orig_dev_data, orig_test_data]]
 
         train_data, dev_data, test_data = [[tokenize_query_doc(example, tokenizer) for example in dataset]
@@ -146,28 +145,29 @@ def train():
     print("#dev: ", len(dev_data))
     print("#test: ", len(orig_test_data))
 
-    iters_per_epoch = len(train_data) // conf["batch_size"]
-    save_every = conf['save_every']
-    if save_every == -1:
-        save_every = iters_per_epoch
-        print(f"Set save_every to {save_every}")
-    eval_every = conf["eval_every"]
-    if conf["eval_every"] == -1:
-        eval_every = iters_per_epoch
-        print("Set eval_every to {}".format(iters_per_epoch))
-    if conf["num_iterations"] < 0:
-        num_iterations = iters_per_epoch * -1 * conf["num_iterations"]
-        print("Set num_iterations to {}".format(num_iterations))
+    # epochs_total, iters_per_epoch, num_iterations = cal_train_confs(train_data, conf)
 
-    # example = dev_data[0]
-    # print("First train example:", example)
-    # print("First train example tokens:", example.tokens)
-    # print("First train example label:", example.label)
+    iters_per_epoch = len(train_data) // conf['batch_size']
+
+    num_iterations = iters_per_epoch * epochs_total
+    print("Set num_iterations to {}".format(num_iterations))
+
+    save_every = max(iters_per_epoch, conf['save_every'])
+    print(f"Set save_every to {save_every}")
+
+    eval_every = max(iters_per_epoch, conf['eval_every'])
+    print("Set eval_every to {}".format(eval_every))
+
+    if verbose:
+        example = dev_data[0]
+        print("First train example:", example)
+        print("First train example tokens:", example.tokens)
+        print("First train example label:", example.label)
 
     writer = SummaryWriter(log_dir=save_path)  # TensorBoard
 
     # Build model
-    epochs_total = num_iterations // iters_per_epoch
+
     model = HardKumaE2E.new(conf, tokenizer, epochs_total)
     initialize_model_(model)
 
@@ -175,7 +175,7 @@ def train():
 
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=conf["lr_decay"], patience=conf["patience"],
-        verbose=True, cooldown=conf["cooldown"], threshold=conf["threshold"],
+        verbose=True, cooldown=conf["cooldown"], threshold=conf["improvement_threshold"],
         min_lr=conf["min_lr"])
 
     iter_i = 0
@@ -187,13 +187,9 @@ def train():
     best_iter = 0
     best_eval = 1.0e9
     weights = conf['weights']
-    max_length = min(conf['mtl']['max_length'], conf['classifier']['max_length'])
+    max_length = min(conf['mtl']['max_length'], conf['cls']['max_length'])
 
     model = model.to(device)
-
-    # print model
-    # print(model)
-    # print_parameters(model)
 
     resume_path = os.path.join(save_path, "model_resume.pt")
     if conf['resume_snapshot'] and os.path.isfile(resume_path):
@@ -209,8 +205,9 @@ def train():
         losses = ckpt['losses']
 
     while True:  # when we run out of examples, shuffle and continue
-        for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True, train_on_part=train_on_part):
-        # for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True):
+        for batch in get_minibatch(train_data, batch_size=batch_size,
+                                   shuffle=True, train_on_part=conf['train_on_part']):
+            # for batch in get_minibatch(train_data, batch_size=batch_size, shuffle=True):
             # done training
             if iter_i == num_iterations:
                 print("# Done training")
@@ -225,11 +222,11 @@ def train():
 
                 print("# Evaluating")
                 dev_eval = evaluate(
-                    model, dev_data, tokenizer, weights, i2t,
+                    model, dev_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
                     max_length=max_length, device=device)
                 test_eval = evaluate(
-                    model, test_data, tokenizer, weights, i2t,
+                    model, test_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
                     max_length=max_length, device=device)
 
@@ -270,7 +267,7 @@ def train():
                     batch_size=eval_batch_size,
                     max_length=512, device=device
                 )
-                test_decoded = [convert_to_eraser_json(p_cls_p, soft_exp_p, hard_exp_p, ot, tokenizer, i2t)
+                test_decoded = [convert_to_eraser_json(p_cls_p, soft_exp_p, hard_exp_p, ot, tokenizer, label_id_to_name)
                                 for p_cls_p, soft_exp_p, hard_exp_p, ot in zip(cls_pred_p,
                                                                                soft_exp_pred,
                                                                                hard_exp_pred,
@@ -314,8 +311,8 @@ def train():
             iter_i += 1
 
             # print info
-            if iter_i % print_every == 0:
-                train_loss = train_loss / print_every
+            if iter_i % conf["print_every"] == 0:
+                train_loss = train_loss / conf["print_every"]
                 writer.add_scalar('train/loss', train_loss, iter_i)
                 for k, v in loss_optional.items():
                     writer.add_scalar('train/' + k, v, iter_i)
@@ -328,7 +325,7 @@ def train():
             # evaluate
             if iter_i % eval_every == 0:
                 dev_eval = evaluate(
-                    model, dev_data, tokenizer, weights, i2t,
+                    model, dev_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
                     max_length=max_length, device=device
                 )
@@ -347,7 +344,7 @@ def train():
 
                 scheduler.step(compare_score)  # adjust learning rate
 
-                if (compare_score < (best_eval * (1 - conf["threshold"]))) and \
+                if (compare_score < (best_eval * (1 - conf["improvement_threshold"]))) and \
                         iter_i > (3 * iters_per_epoch):
                     print(f"***highscore*** {compare_score:0.4}")
                     best_eval = compare_score
