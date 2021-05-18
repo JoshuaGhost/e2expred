@@ -58,6 +58,6 @@
         "soft_selection": false
     },
 
-    "save_path": "results/mtl_e2e/shared_encoder_cold_start/",
+    "save_path": "results_wandb",
     "share_encoder": true
 }
