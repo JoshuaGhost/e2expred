@@ -8,6 +8,9 @@ class BlockConfig:
         self.use_half_precision = conf['use_half_precision']
         self.max_length = conf['max_length']
         self.cls_head = conf['cls_head']
+        self.warm_start = conf.get('warm_start', False)
+        self.pretrained_model_dir = conf.get('pretrained_model_dir', None)
+        self.num_labels = conf['num_labels']
 
 
 class MTLConfig(BlockConfig):
@@ -27,11 +30,12 @@ class SelectorConfig:
         self.dependent_z = conf['dependent-z']
         self.dist = conf['dist']
         self.exp_threshold = conf['exp_threshold']
+        self.soft_selection = conf['soft_selection']
 
 
 class E2ExPredConfig(Config):
     def __init__(self, conf):
-        print(conf)
+        # print(conf)
         self.data_dir = conf['data_dir']
         self.bert_vocab = conf['bert_vocab']
         self.rebalance_approach = conf['rebalance_approach']
@@ -41,7 +45,7 @@ class E2ExPredConfig(Config):
         self.classes = conf["classes"]
 
         self.weights_scheduler = conf["weights_scheduler"]
-        # self.num_iterations = conf['num_iterations']
+        # self.iter_total = conf['iter_total']
         # self.patience = conf['patience']
         # self.batch_size = conf["batch_size"]
         # self.eval_batch_size = conf["eval_batch_size"]
@@ -59,10 +63,12 @@ class E2ExPredConfig(Config):
         self.lambda_min = conf['lambda_min']
         self.lambda_max = conf['lambda_max']
 
-        self.soft_selection = conf['soft_selection']
+        # self.soft_selection = conf['soft_selection']
 
         self.weights = conf['weights']
 
         self.mtl_conf = MTLConfig(conf['mtl'])
         self.selector_conf = SelectorConfig(conf['selector'])
         self.cls_conf = CLSConfig(conf['cls'])
+
+        self.share_encoder = conf['share_encoder']

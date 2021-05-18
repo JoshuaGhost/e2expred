@@ -29,8 +29,6 @@
     "lambda_min": 1e-12,
     "lambda_max": 5.0,
 
-    "soft_selection": false,
-
     "weights": {
         "w_aux": 1.0,
         "w_exp": 1.0,
@@ -56,8 +54,10 @@
         "dropout": 0.5,
         "dependent-z": 0,
         "exp_threshold": 0.5,
-        "dist": "kuma"
+        "dist": "kuma",
+        "soft_selection": false
     },
 
-    "save_path": "results/mtl_e2e/separate_encoder_cold_start/"
+    "save_path": "results_wandb/",
+    "share_encoder": true
 }

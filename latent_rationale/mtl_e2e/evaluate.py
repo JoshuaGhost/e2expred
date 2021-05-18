@@ -6,7 +6,7 @@ from sklearn.metrics import classification_report, accuracy_score
 
 from latent_rationale.common.util import get_minibatch
 from latent_rationale.mtl_e2e.metrics import cls_prf
-from latent_rationale.mtl_e2e.utils import prepare_minibatch
+from latent_rationale.mtl_e2e.utils import bert_input_preprocess
 from latent_rationale.common.util import get_z_stats
 
 
@@ -59,11 +59,17 @@ def evaluate(model, data, tokenizer,
     masks_total = []
     labels_total = []
     exp_labels_total = []
-    for batch in get_minibatch(data, batch_size=batch_size, shuffle=False):
-        inputs, exp_labels, labels, positions, attention_masks, padding_masks = prepare_minibatch(batch,
-                                                                                                  tokenizer=tokenizer,
-                                                                                                  max_length=max_length,
-                                                                                                  device=device)
+    for batch in data:
+        inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = batch
+
+        exp_labels = exp_labels.cuda()
+        cls_labels = cls_labels.cuda()
+        padding_masks = padding_masks.cuda()
+
+        # inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = bert_input_preprocess(batch,
+        #                                                                                           tokenizer=tokenizer,
+        #                                                                                           max_length=max_length,
+        #                                                                                           device=device)
         batch_size = len(batch)
         # print(inputs.data.shape)
         with torch.no_grad():
@@ -76,9 +82,9 @@ def evaluate(model, data, tokenizer,
             soft_exp_pred_total.extend(soft_exp_pred)
             hard_exp_pred_total.extend(hard_exp_pred)
             masks_total.extend(attention_masks)
-            labels_total.extend(labels)
+            labels_total.extend(cls_labels)
             exp_labels_total.extend(exp_labels.data)
-            loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, labels, hard_exp_pred, exp_labels.data,
+            loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels, hard_exp_pred, exp_labels.data,
                                                  padding_masks, weights)
 
             results['loss'] += loss.item() * batch_size

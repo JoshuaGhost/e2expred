@@ -6,6 +6,7 @@ import torch.nn as nn
 from transformers.file_utils import add_start_docstrings_to_callable
 from transformers.modeling_bert import BERT_INPUTS_DOCSTRING
 
+from latent_rationale.mtl_e2e.config import MTLConfig, SelectorConfig
 from latent_rationale.mtl_e2e.utils import PaddedSequence
 from latent_rationale.nn.kuma_gate import KumaGate
 from latent_rationale.common.latent import IndependentSelector
@@ -93,11 +94,11 @@ class BertDataPreprocessor(nn.Module):
 
 class KumaSelectorLayer(IndependentSelector):
     def __init__(self,
-                 selector_params,
+                 selector_params: SelectorConfig,
                  repr_size: int):
         super(KumaSelectorLayer, self).__init__()
-        dropout = selector_params['dropout']
-        distribution = selector_params['dist']
+        dropout = selector_params.dropout
+        distribution = selector_params.dist
         self.selector_head = nn.Sequential(
             nn.Dropout(p=dropout),
             nn.Linear(in_features=repr_size, out_features=repr_size),
@@ -113,7 +114,7 @@ class KumaSelectorLayer(IndependentSelector):
         self.z_dists = []  # z distribution(s)
         self.report_params()
 
-    def forward(self, x, mask, **kwargs):
+    def forward(self, x, mask, **kwargs) -> torch.Tensor:
 
         # encode sentence
         # lengths = mask.sum(1)
@@ -270,18 +271,18 @@ class BertModelWithEmbeddingMask(BertModel):
 
 class BertClassifier(nn.Module):
     def __init__(self,
-                 classifier_params,
+                 classifier_params: MTLConfig,
                  tokenizer: BertTokenizer, ):
         super(BertClassifier, self).__init__()
-        self.num_labels = classifier_params['num_labels']
-        self.cls_params = classifier_params['cls_head']
-        self.max_length = classifier_params['max_length']
+        self.num_labels = classifier_params.num_labels
+        self.cls_params = classifier_params.cls_head
+        self.max_length = classifier_params.max_length
         self.pad_token_id = tokenizer.pad_token_id
         self.cls_token_id = tokenizer.cls_token_id
         self.sep_token_id = tokenizer.sep_token_id
-        bert_dir = classifier_params['bert_dir']
+        bert_dir = classifier_params.bert_dir
         bert_model = BertModelWithEmbeddingMask.from_pretrained(bert_dir)
-        if bool(classifier_params['use_half_precision']):
+        if bool(classifier_params.use_half_precision):
             import apex
             bert_model = bert_model.half()
         self.bert_model = bert_model

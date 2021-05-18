@@ -1,58 +1,61 @@
-from typing import Any
+from typing import Tuple, Dict
 
 from sklearn.metrics import accuracy_score
 from transformers import BertTokenizer
 import torch
 from torch import nn
 from latent_rationale.common.util import get_z_stats
+from latent_rationale.mtl_e2e.config import E2ExPredConfig
 
 from latent_rationale.mtl_e2e.models.components import BertClassifier, KumaSelectorLayer
 
 
 class HardKumaE2E(nn.Module):
     def __init__(self,
-                 cfg: Any,
+                 cfg: E2ExPredConfig,
                  tokenizer: BertTokenizer,
                  epochs_total: int):
         super(HardKumaE2E, self).__init__()
 
         self.epochs_total = epochs_total
-        self.weights_scheduler = cfg['weights_scheduler']
-        self.lambda_min = cfg['lambda_min']
-        self.lambda_max = cfg['lambda_max']
-        mtl_params = cfg['mtl']
+        self.weights_scheduler = cfg.weights_scheduler
+        self.lambda_min = cfg.lambda_min
+        self.lambda_max = cfg.lambda_max
+        mtl_params = cfg.mtl_conf
         self.bert_mtl = BertClassifier(mtl_params, tokenizer)
         # self.bert_mtl_exp = nn.Linear(300, 768)
         self.auxilliary_criterion = nn.CrossEntropyLoss(reduction='none')
 
         bert_ebd_dims = self.bert_mtl.bert_model.config.hidden_size
-        selector_params = cfg['selector']
-        if selector_params['selector_type'] == 'hard binary':
+        selector_params = cfg.selector_conf
+        if selector_params.selector_type == 'hard binary':
             self.rationale_selector = KumaSelectorLayer(selector_params,
                                                         repr_size=bert_ebd_dims)
         else:
             raise NotImplementedError
         from latent_rationale.common.losses import resampling_rebalanced_crossentropy
         self.exp_criterion = resampling_rebalanced_crossentropy(seq_reduction='mean')
-        self.exp_threshold = selector_params.get('exp_threshold', 0.5)
+        self.exp_threshold = selector_params.exp_threshold
 
-        classifier_params = cfg['cls']
-        self.shared_encoder = cfg.get('share_encoder', False)
-        if self.shared_encoder:
+        classifier_params = cfg.cls_conf
+        self.share_encoder = cfg.share_encoder
+        if self.share_encoder:
             self.classifier = self.bert_mtl
         else:
             self.classifier = BertClassifier(classifier_params, tokenizer)
         self.final_cls_criterion = nn.CrossEntropyLoss(reduction='none')
 
-        self.soft_selection = cfg['soft_selection']
+        self.soft_selection = selector_params.soft_selection
 
-        if cfg.get('warm_start_mtl', None) is not None:
-            self.bert_mtl.bert_model.load_state_dict(torch.load(cfg['warm_start_mtl']))
-        if cfg.get('warm_start_cls', None) is not None and not self.shared_encoder:
+        if cfg.mtl_conf.warm_start:
+            state_dict = torch.load(cfg.mtl_conf.pretrained_model_dir)
+            self.bert_mtl.bert_model.load_state_dict(state_dict)
+        if cfg.cls_conf.warm_start and not self.share_encoder:
             # If the encoder is shared, the cls warm start is muted
-            self.classifier.bert_model.load_state_dict(torch.load(cfg['warm_start_cls']))
+            state_dict = torch.load(cfg.cls_conf.pretrained_model_dir)
+            self.classifier.bert_model.load_state_dict(state_dict)
 
-        lambda_init = cfg['lambda_init']
+        lambda_init = cfg.lambda_init
         self.register_buffer('lambda0', torch.full((1,), lambda_init))
         self.register_buffer('lambda1', torch.full((1,), lambda_init))
         self.register_buffer('c0_ma', torch.full((1,), 0.))  # moving average
@@ -63,34 +66,43 @@ class HardKumaE2E(nn.Module):
         return cls(cfg, tokenizer, epochs_total)
 
     def forward(self,
-                bert_inputs: torch.Tensor,
+                inputs: torch.Tensor,
                 attention_masks: torch.Tensor,
                 padding_masks: torch.Tensor,
                 positions: torch.Tensor):
         device = next(self.parameters()).device
 
-        auxiliary_cls_p, mtl_exp_output_hidden = self.bert_mtl(bert_inputs,
+        inputs = inputs.to(device)
+        attention_masks = attention_masks.to(device)
+        padding_masks = padding_masks.to(device)
+        positions = positions.to(device)
+
+        auxiliary_cls_p, mtl_exp_output_hidden = self.bert_mtl(inputs,
                                                                attention_masks=attention_masks,
                                                                positions=positions)
         soft_z = self.rationale_selector(mtl_exp_output_hidden, padding_masks).squeeze(dim=-1)
+        hard_z = torch.where(soft_z >= self.exp_threshold,
+                             torch.ones_like(soft_z).to(device=device),
+                             torch.zeros_like(soft_z).to(device=device))
         if self.training:
-            hard_z = torch.where(soft_z >= self.exp_threshold, torch.LongTensor([1]).to(device=device),
-                                 torch.LongTensor([0]).to(device=device))
+
             hard_z = (hard_z - soft_z).detach() + soft_z
-        else:
-            hard_z = torch.where(soft_z >= self.exp_threshold, torch.LongTensor([1]).to(device=device),
-                                 torch.LongTensor([0]).to(device=device))
+        # else:
+        #     hard_z = torch.where(soft_z >= self.exp_threshold, torch.LongTensor([1]).to(device=device),
+        #                          torch.LongTensor([0]).to(device=device))
         if self.soft_selection:
             attribution_map = soft_z
         else:
             attribution_map = hard_z
-        cls_p, _ = self.classifier(bert_inputs,
+        cls_p, _ = self.classifier(inputs,
                                    attention_masks=attention_masks,
                                    embedding_masks=attribution_map,
                                    positions=positions)
         return auxiliary_cls_p, cls_p, soft_z, hard_z
 
-    def get_loss(self, p_aux, p_cls, t_cls, p_exp, t_exp, mask, weights, epoch=None):
+    def get_loss(
+            self, p_aux, p_cls, t_cls, p_exp, t_exp, mask, weights, epoch=None
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         optional = {}
         selection = weights['selection']
         lasso = weights['lasso']
