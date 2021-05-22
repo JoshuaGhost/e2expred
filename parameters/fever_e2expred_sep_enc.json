@@ -7,8 +7,8 @@
     "sentence_sampling_method": "whole_document",
     "merge_evidences": 1,
     "classes": [
-        "NEG",
-        "POS"
+        "SUPPORTS",
+        "REFUTES"
     ],
 
     "weights_scheduler": "parabolic",

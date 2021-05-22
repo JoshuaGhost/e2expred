@@ -121,7 +121,6 @@ def evaluate(model, data, tokenizer,
             results[k] = v / total
 
     results.update(cls_prf(labels_total, aux_pred_total, label_list, report_prefix='aux'))
-    results['exp_f1'] = 2./(1./(results['exp_p'] + eps) + 1./(results['exp_r'] + eps))
     results.update(cls_prf(labels_total, cls_pred_total, label_list, report_prefix='cls'))
 
     # loss, accuracy, optional items

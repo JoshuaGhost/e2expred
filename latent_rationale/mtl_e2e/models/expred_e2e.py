@@ -85,7 +85,6 @@ class HardKumaE2E(nn.Module):
                              torch.ones_like(soft_z).to(device=device),
                              torch.zeros_like(soft_z).to(device=device))
         if self.training:
-
             hard_z = (hard_z - soft_z).detach() + soft_z
         # else:
         #     hard_z = torch.where(soft_z >= self.exp_threshold, torch.LongTensor([1]).to(device=device),
@@ -129,11 +128,12 @@ class HardKumaE2E(nn.Module):
                 w_exp = weights['exp']
                 w_cls = weights['cls']
 
-        # print(f"w_aux: {w_aux}, w_exp: {w_exp}, w_cls: {w_cls}")
+
         # print(self.training, self.epochs_total, epoch)
 
         loss_aux = self.auxilliary_criterion(p_aux, t_cls).mean()
         optional['aux_acc'] = accuracy_score(t_cls.cpu(), p_aux.cpu().argmax(axis=-1).detach())
+        # print(t_cls.cpu(), p_aux.cpu())
         optional["aux_loss"] = loss_aux.item()
         loss = w_aux * loss_aux
 
@@ -142,6 +142,7 @@ class HardKumaE2E(nn.Module):
         eps = 1e-10
         optional['exp_p'] = (((p_exp > self.exp_threshold).type(torch.long) * t_exp).sum(-1)/(p_exp.sum(-1)+eps)).mean()
         optional['exp_r'] = (((p_exp > self.exp_threshold).type(torch.long) * t_exp).sum(-1)/(t_exp.sum(-1)+eps)).mean()
+        optional['exp_f1'] = 2. / (1. / (optional['exp_p'] + eps) + 1. / (optional['exp_r'] + eps))
         loss += w_exp * loss_exp
 
         loss_cls = self.final_cls_criterion(p_cls, t_cls).mean()

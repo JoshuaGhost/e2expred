@@ -9,6 +9,7 @@ import os
 import numpy as np
 
 import torch
+from pytorch_transformers import AdamW
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -34,7 +35,7 @@ def train(model, conf):
     # initialize_model_(model, conf)
     initialize_model_(model)
 
-    optimizer = Adam(model.parameters(), lr=conf["lr"], weight_decay=conf["weight_decay"])
+    optimizer = AdamW(model.parameters(), lr=conf["lr"], weight_decay=conf["weight_decay"])
 
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=conf["lr_decay"], patience=conf["patience"],
@@ -43,10 +44,10 @@ def train(model, conf):
 
     iter_i = 0
     epoch_train_loss = 0.
-    epoch_optional_loss = defaultdict(int)
+    epoch_optional_loss = defaultdict(float)
     start = time.time()
     losses = []
-    metrices_names = "cls_acc cls_f1 exp_precision exp_recall exp_f1 best_eval".split()
+    metrices_names = "cls_acc exp_f1 best_eval".split()
     metrics = {name: [] for name in metrices_names}
     best_eval_iter = 0
     best_eval_loss = 1.0e9
@@ -82,7 +83,7 @@ def train(model, conf):
                     print("# No model found.")
 
                 print("# Evaluating")
-                dev_eval = evaluate(
+                final_dev_eval = evaluate(
                     model, dev_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
                     max_length=max_length, device=device)
@@ -92,10 +93,10 @@ def train(model, conf):
                     max_length=max_length, device=device)
 
                 wandb.log({'best_eval_iter': best_eval_iter,
-                           'dev': dev_eval,
+                           'final_dev': final_dev_eval,
                            'test': test_eval})
                 print(f"best model iter {best_eval_iter}: "
-                      f"dev {make_kv_string(dev_eval)} "
+                      f"final_dev {make_kv_string(final_dev_eval)} "
                       f"test {make_kv_string(test_eval)}")
 
                 # save result
@@ -173,14 +174,12 @@ def train(model, conf):
                 # writer.add_scalar('train/loss', train_loss, iter_i)
                 wandb.log({'train':{'loss':epoch_train_loss,
                                     'iter_i': iter_i}})
-                loss_optional = {k: v/conf['print_every'] for k, v in loss_optional.items()}
+                epoch_optional_loss = {k: v/conf['print_every'] for k, v in epoch_optional_loss.items()}
                 wandb.log(
                     {
                         'train': {
                             'loss': epoch_train_loss,
-                            'optional': {
-                                k: v / conf['print_every']
-                            },
+                            'optional': epoch_optional_loss,
                             'iter_i': iter_i,
                             'epoch': epoch
                         }
@@ -192,7 +191,7 @@ def train(model, conf):
                 print(f"Epoch {epoch} Iter {iter_i} time={min_elapsed}m loss={epoch_train_loss:0.4} {print_str}")
                 losses.append(epoch_train_loss)
                 epoch_train_loss = 0.
-                epoch_optional_loss = defaultdict(int)
+                epoch_optional_loss = defaultdict(float)
 
             # evaluate
             if iter_i % eval_every == 0:
@@ -264,7 +263,7 @@ if __name__ == "__main__":
 
     dataset_name = training_conf['dataset_name']
 
-    wandb.init(name=f'e2expred unit test on {dataset_name}',
+    wandb.init(name=f'e2expred regression test on {dataset_name}',
                entity='explainable-nlp',
                project='e2expred')
     wandb.config.update(training_conf)
@@ -328,13 +327,7 @@ if __name__ == "__main__":
     #             num_epochs
     save_path = os.path.join(training_conf['save_path'], dataset_name)
     os.makedirs(save_path, exist_ok=True)
-    model_ids = list(map(int, os.listdir(save_path)))
-    model_id = str(max(model_ids) + 1 if len(model_ids) > 0 else 0)
-    wandb.config.update({'model_id': model_id})
-    save_path = os.path.join(save_path, model_id)
-    os.makedirs(save_path, exist_ok=True)
-    cache_dir = os.path.join(save_path, "preprocessed.pkl")
-    print(f"model saved under {os.path.abspath(save_path)}")
+
 
     label_id_to_name = training_conf['classes']
     decode_split = training_conf['decode_split']
@@ -386,6 +379,16 @@ if __name__ == "__main__":
         print("First train example tokens:", example.tokens)
         print("First train example label:", example.label)
 
+    model_ids = list(map(int, filter(lambda x: x.isnumeric(), os.listdir(save_path))))
+    if training_conf['resume_snapshot']:
+        model_id = str(max(model_ids) if len(model_ids) > 0 else 0)
+    else:
+        model_id = str(max(model_ids) + 1 if len(model_ids) > 0 else 0)
+    wandb.config.update({'model_id': model_id})
+    save_path = os.path.join(save_path, model_id)
+    os.makedirs(save_path, exist_ok=True)
+    # cache_dir = os.path.join(save_path, "preprocessed.pkl")
+    print(f"model saved under {os.path.abspath(save_path)}")
     with open(os.path.join(save_path, 'config'), 'w+') as fout:
         fout.write(f'training config:\n{str(training_conf)}\n')
         fout.write(f'model config:\n{str(model_conf)}\n')

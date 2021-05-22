@@ -105,10 +105,10 @@ def get_args():
     parser.add_argument('--dataset_name', type=str, choices=['movies', 'fever', 'multirc', 'short_movies'])
     parser.add_argument('--data_dir', type=str)
     parser.add_argument('--save_path', type=str)
-    parser.add_argument('--resume_snapshot', type=bool, default=True)
+    parser.add_argument('--resume_snapshot', action='store_true')
     parser.add_argument('--warm_start_mtl', type=str)
     parser.add_argument('--warm_start_cls', type=str)
-    parser.add_argument('--share_encoder', action='store_true')
+    parser.add_argument('--share_encoder', type=bool)
 
     parser.add_argument('--print_every', type=int, default=100)
     parser.add_argument('--eval_every', type=int, default=-1)
