@@ -6,6 +6,7 @@ from sklearn.metrics import classification_report, accuracy_score
 
 from latent_rationale.common.util import get_minibatch
 from latent_rationale.mtl_e2e.metrics import cls_prf
+from latent_rationale.mtl_e2e.models.expred_e2e import HardKumaE2E
 from latent_rationale.mtl_e2e.utils import bert_input_preprocess
 from latent_rationale.common.util import get_z_stats
 
@@ -37,7 +38,7 @@ def get_histogram_counts(z=None, mask=None, mb=None):
 # metrics_names = "aux_acc cls_acc cls_f1 exp_acc exp_precision exp_recall exp_f1 best_eval".split()
 
 
-def evaluate(model, data, tokenizer,
+def evaluate(model:HardKumaE2E, data, tokenizer,
              weights, label_list,
              batch_size=25,
              max_length=512,
@@ -60,11 +61,10 @@ def evaluate(model, data, tokenizer,
     labels_total = []
     exp_labels_total = []
     for batch in data:
-        inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = batch
+        inputs, exp_labels, cls_labels, positions, attention_masks, query_masks = batch
 
         exp_labels = exp_labels.cuda()
         cls_labels = cls_labels.cuda()
-        padding_masks = padding_masks.cuda()
 
         # inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = bert_input_preprocess(batch,
         #                                                                                           tokenizer=tokenizer,
@@ -75,8 +75,8 @@ def evaluate(model, data, tokenizer,
         with torch.no_grad():
             aux_pred_p, cls_pred_p, soft_exp_pred, hard_exp_pred = model(inputs.data,
                                                                          attention_masks=attention_masks,
-                                                                         padding_masks=padding_masks,
-                                                                         positions=positions.data)
+                                                                         positions=positions.data,
+                                                                         query_masks=query_masks)
             aux_pred_p_total.extend(aux_pred_p)
             cls_pred_p_total.extend(cls_pred_p)
             soft_exp_pred_total.extend(soft_exp_pred)
@@ -84,8 +84,10 @@ def evaluate(model, data, tokenizer,
             masks_total.extend(attention_masks)
             labels_total.extend(cls_labels)
             exp_labels_total.extend(exp_labels.data)
-            loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels, hard_exp_pred, exp_labels.data,
-                                                 padding_masks, weights)
+            loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels,
+                                                 hard_exp_pred, exp_labels.data,
+                                                 mask=attention_masks,
+                                                 weights=weights)
 
             results['loss'] += loss.item() * batch_size
             for k, v in loss_optional.items():
@@ -94,7 +96,7 @@ def evaluate(model, data, tokenizer,
                 results[k] += v * batch_size
 
             if hasattr(model, "z"):
-                n0, nc, n1, nt = get_z_stats(soft_exp_pred, padding_masks)
+                n0, nc, n1, nt = get_z_stats(soft_exp_pred, attention_masks)
                 z_totals['p0'] += n0
                 z_totals['pc'] += nc
                 z_totals['p1'] += n1

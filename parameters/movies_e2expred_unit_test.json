@@ -32,9 +32,10 @@
     "weights": {
         "w_aux": 1.0,
         "w_exp": 1.0,
+        "exp_lagrange_lr": 0.01,
         "selection": 0.3,
         "lasso": 0.0,
-        "lagrange_lr": 0.01,
+        "l0_lagrange_lr": 0.01,
         "lagrange_alpha": 0.99
     },
 

@@ -114,7 +114,7 @@ class KumaSelectorLayer(IndependentSelector):
         self.z_dists = []  # z distribution(s)
         self.report_params()
 
-    def forward(self, x, mask, **kwargs) -> torch.Tensor:
+    def forward(self, x, mask:torch.Tensor, **kwargs) -> torch.Tensor:
 
         # encode sentence
         # lengths = mask.sum(1)
@@ -139,7 +139,7 @@ class KumaSelectorLayer(IndependentSelector):
 
         # mask invalid positions
         z = z.squeeze(-1)
-        z = torch.where(mask, z, z.new_zeros([1]))
+        z = torch.where(mask.type(torch.bool), z, z.new_zeros([1]))
 
         self.z = z  # [B, T]
         self.z_dists = [z_dist]

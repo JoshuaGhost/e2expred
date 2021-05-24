@@ -140,21 +140,20 @@ def train(model, conf):
 
             # the default collate_fn collates a list of such tuples into a single tuple of a batched image tensor and a
             # batched class label Tensor. cite: https://pytorch.org/docs/stable/data.html#map-style-datasets
-            inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = batch
+            inputs, exp_labels, cls_labels, positions, attention_masks, query_masks = batch
 
             exp_labels = exp_labels.cuda()
             cls_labels = cls_labels.cuda()
-            padding_masks = padding_masks.cuda()
 
             epoch = iter_i // iters_per_epoch
             model.train()
             aux_pred_p, cls_pred_p, soft_exp_pred, hard_exp_pred = model(inputs=inputs,
                                                                          attention_masks=attention_masks,
-                                                                         padding_masks=padding_masks,
-                                                                         positions=positions)
+                                                                         positions=positions,
+                                                                         query_masks=query_masks)
             loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels,
                                                  soft_exp_pred, exp_labels.data,
-                                                 padding_masks, weights, epoch)
+                                                 attention_masks, weights, epoch)
             # wandb.log({'training':{'loss':loss,
             #                        'loss_optional': loss_optional}})
             epoch_train_loss += loss.item()
@@ -263,7 +262,7 @@ if __name__ == "__main__":
 
     dataset_name = training_conf['dataset_name']
 
-    wandb.init(name=f'e2expred regression test on {dataset_name}',
+    wandb.init(name=f'e2expred on {dataset_name} (new exp weight)',
                entity='explainable-nlp',
                project='e2expred')
     wandb.config.update(training_conf)
@@ -346,15 +345,15 @@ if __name__ == "__main__":
     orig_train_data, orig_dev_data, orig_test_data = load_eraser_data(data_dir, merge_evidences)
     cache_dir_train = os.path.join(save_path, "train_preprocessed.pkl")
     train_data = MTLDataLoader(orig_train_data, label_name_to_id, tokenizer, max_length,
-                               batch_size, shuffle=True, num_workers=32,
+                               batch_size, shuffle=True, num_workers=18,
                                cache_fname=cache_dir_train)
     cache_dir_dev = os.path.join(save_path, "dev_preprocessed.pkl")
     dev_data = MTLDataLoader(orig_dev_data, label_name_to_id, tokenizer, max_length,
-                             batch_size, shuffle=False, num_workers=32,
+                             batch_size, shuffle=False, num_workers=18,
                              cache_fname=cache_dir_dev)
     cache_dir_test = os.path.join(save_path, "test_preprocessed.pkl")
     test_data = MTLDataLoader(orig_test_data, label_name_to_id, tokenizer, max_length,
-                              batch_size, shuffle=False, num_workers=32,
+                              batch_size, shuffle=False, num_workers=18,
                               cache_fname=cache_dir_test)
 
     print("#train: ", len(train_data))

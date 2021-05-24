@@ -2,13 +2,13 @@
     "data_dir": "datasets/",
     "bert_vocab": "bert-base-uncased",
     "rebalance_approach": "resampling",
-    "dataset_name": "movies",
+    "dataset_name": "fever",
 
     "sentence_sampling_method": "whole_document",
     "merge_evidences": 1,
     "classes": [
-        "NEG",
-        "POS"
+        "SUPPORTS",
+        "REFUTES"
     ],
 
     "weights_scheduler": "parabolic",

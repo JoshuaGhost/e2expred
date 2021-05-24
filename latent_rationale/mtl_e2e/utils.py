@@ -1,7 +1,7 @@
 import argparse
 import json
 from dataclasses import dataclass
-from typing import List, Any
+from typing import List, Any, Dict
 
 import copy
 import torch
@@ -181,15 +181,14 @@ def bert_input_preprocess(examples: List[Example],
         inputs.append(torch.cat([cls_token, q, sep_token, d]))
         exps.append(torch.cat([torch.Tensor([0] * (len(q) + 2)), exp]))
         position_ids.append(torch.tensor(list(range(0, len(q) + 1)) + list(range(0, len(d) + 1))))  # tokens
-        # positions are counted from 1, the two 0s are for [cls] and [sep], [pad]s are also nominated as pos 0
+        # positions starts from 1, the two 0s are for [cls] and [sep], [pad]s are also nominated as pos 0
 
     inputs = PaddedSequence.autopad(inputs, batch_first=True, padding_value=pad_token_id, device=device)
     positions = PaddedSequence.autopad(position_ids, batch_first=True, padding_value=0, device=device)
     exps = PaddedSequence.autopad(exps, batch_first=True, padding_value=0, device=device)
     attention_masks = inputs.mask(on=1, off=0).type(torch.float).to(device=device)
-    padding_masks = inputs.mask(on=1, off=0).type(torch.bool).to(device=device)
     labels = torch.LongTensor(labels).to(device=device)
-    return inputs, exps, labels, positions, attention_masks, padding_masks
+    return inputs, exps, labels, positions, attention_masks
 
 
 # def numerify_labels(dataset, labels_mapping):
@@ -203,17 +202,17 @@ def bert_input_preprocess(examples: List[Example],
 #     return dataset
 
 
-def numerify_label(ann, labels_mapping):
+def numerify_label(ann:Example, labels_mapping):
     return Example(tokens=ann.tokens,
                    label=labels_mapping[ann.label],
                    token_labels=ann.token_labels,
                    query=ann.query,
                    ann_id=ann.ann_id,
                    docid=ann.docid)
-    return dataset
+    # return dataset
 
 
-def tokenize_query_doc(example: Example, tokenizer: Any):
+def tokenize_query_doc(example: Example, labels_mapping: Dict[str, int], tokenizer: Any):
     if isinstance(tokenizer, BertTokenizer):
         query_tokens = tokenizer.encode(example.query, add_special_tokens=False)
     else:
@@ -231,14 +230,14 @@ def tokenize_query_doc(example: Example, tokenizer: Any):
         return Example(query=torch.LongTensor(query_tokens),  # .type(torch.long),
                        tokens=torch.LongTensor(tokens),  # .type(torch.long),
                        token_labels=torch.Tensor(token_labels),
-                       label=torch.Tensor([example.label]),
+                       label=torch.Tensor([labels_mapping[example.label]]),
                        ann_id=example.ann_id,
                        docid=example.docid)
     else:
         return Example(query=query_tokens,
                        tokens=tokens,
                        token_labels=token_labels,
-                       label=example.label,
+                       label=labels_mapping[example.label],
                        ann_id=example.ann_id,
                        docid=example.docid)
 

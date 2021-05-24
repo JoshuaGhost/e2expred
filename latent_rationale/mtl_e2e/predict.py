@@ -22,11 +22,10 @@ def predict(model, data, tokenizer, batch_size=25, max_length=512, device=None):
     # labels_total = []
     # exp_labels_total = []
     for batch in data:
-        inputs, _, _, positions, attention_masks, padding_masks = batch
+        inputs, _, _, positions, attention_masks, query_masks = batch
 
         # exp_labels = exp_labels.cuda()
         # cls_labels = cls_labels.cuda()
-        padding_masks = padding_masks.cuda()
         # inputs, exp_labels, cls_labels, positions, attention_masks, padding_masks = bert_input_preprocess(batch,
         #                                                                                           tokenizer=tokenizer,
         #                                                                                           max_length=max_length,
@@ -34,8 +33,8 @@ def predict(model, data, tokenizer, batch_size=25, max_length=512, device=None):
         with torch.no_grad():
             aux_pred_p, cls_pred_p, soft_exp_pred, hard_exp_pred = model(inputs=inputs,
                                                                          attention_masks=attention_masks,
-                                                                         padding_masks=padding_masks,
-                                                                         positions=positions.data)
+                                                                         positions=positions.data,
+                                                                         query_masks=query_masks)
             # aux_pred_total.extend(aux_pred)
             cls_pred_p_total.extend(cls_pred_p)
             hard_exp_pred_total.extend(hard_exp_pred)
