@@ -16,6 +16,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.tensorboard import SummaryWriter
 from transformers import BertTokenizer
 
+from latent_rationale import eraser_metrics
 from latent_rationale.common.util import initialize_model_, get_device, print_parameters, get_minibatch, \
     make_kv_string, write_jsonl
 from latent_rationale.common.eraser_utils import convert_to_eraser_json, load_eraser_data
@@ -211,7 +212,7 @@ def train(model, conf):
                 print(f"# epoch {epoch} iter {iter_i}: dev {make_kv_string(dev_eval)}")
 
                 # save best model parameters
-                compare_score = getattr(dev_eval, 'obj', dev_eval['loss'])
+                compare_score = dev_eval.get('obj', dev_eval['loss'])
                 scheduler.step(compare_score)  # adjust learning rate
 
                 if (compare_score < (best_eval_loss * (1 - conf["improvement_threshold"]))) and \
@@ -261,69 +262,13 @@ if __name__ == "__main__":
     training_conf, model_conf = get_args()
 
     dataset_name = training_conf['dataset_name']
+    unit_test = training_conf.get('unit_test', False)
 
-    wandb.init(name=f'e2expred on {dataset_name} (new exp weight)',
+    wandb.init(name=f'e2expred on {dataset_name} {"unit_test " if unit_test else ""}(GECO)',
                entity='explainable-nlp',
-               project='e2expred')
+               project=f'e2expred{"-unit_test" if unit_test else ""}')
     wandb.config.update(training_conf)
 
-    # if training_conf['lambda_init'] > 0.:
-    #     l0 = f"_{round(training_conf['weights']['selection'] * 100)}pct"
-    # else:
-    #     l0 = '_no_l0'
-    # ch = training_conf['weights'].get('lasso', 0.)
-    # if ch > 0.:
-    #     lasso = f'_lasso_{ch}'
-    # else:
-    #     lasso = '_no_coherence'
-    #
-    # def decode_namepart(conf, entry, entry_as_comp=False):
-    #     value = conf.get(entry, None)
-    #     if value is None:
-    #         ret = ''
-    #     elif isinstance(value, str):
-    #         if entry_as_comp:
-    #             ret = '_' + entry
-    #         else:
-    #             ret = '_' + value
-    #     elif isinstance(value, bool):
-    #         if value:
-    #             ret = '_' + entry
-    #         else:
-    #             ret = ''
-    #     elif isinstance(value, int) or isinstance(value, float):
-    #         ret = f'_{entry}_{value}'
-    #     return ret
-    #
-    # weights_scheduler = decode_namepart(training_conf, 'weights_scheduler')
-    # share_encoder = decode_namepart(training_conf, 'share_encoder')
-    # warm_start_mtl = decode_namepart(training_conf, 'warm_start_mtl', True)
-    # warm_start_cls = decode_namepart(training_conf, 'warm_start_cls', True)
-    # exp_threshold = decode_namepart(training_conf, 'exp_threshold')
-    # soft_selection = decode_namepart(training_conf['selector'], 'soft_selection', True)
-    #
-    # num_epochs = f"_epochs_{epochs_total}"
-    #
-    # w_aux = training_conf['weights'].get('w_aux', None)
-    # if w_aux is not None:
-    #     w_exp = training_conf['weights']['w_exp']
-    # else:
-    #     w_aux, w_exp = 1., 1.
-    #     training_conf['weights']['w_aux'] = w_aux
-    #     training_conf['weights']['w_exp'] = w_exp
-    # ws_mtl = f"_waux_{w_aux}_wexp_{w_exp}"
-    #
-    # save_path = training_conf['save_path'] + \
-    #             f"/{dataset_name}/mtl_e2e" + \
-    #             l0 + lasso + \
-    #             weights_scheduler + \
-    #             ws_mtl + \
-    #             share_encoder + \
-    #             warm_start_mtl + \
-    #             warm_start_cls + \
-    #             exp_threshold + \
-    #             soft_selection + \
-    #             num_epochs
     save_path = os.path.join(training_conf['save_path'], dataset_name)
     os.makedirs(save_path, exist_ok=True)
 
@@ -397,3 +342,17 @@ if __name__ == "__main__":
     model = HardKumaE2E.new(model_conf, tokenizer, epochs_total)
 
     train(model, training_conf)
+    scores = eraser_metrics.main(
+        [
+            "--data_dir",
+            data_dir,
+            "--split",
+            "test",
+            "--results",
+            os.path.join(save_path, "test_decoded.jsonl"),
+            "--score_file",
+            os.path.join(save_path, "test_scores.json"),
+        ]
+    )
+    wandb.log(scores)
+    wandb.save(os.path.join(save_path, "*.json"))

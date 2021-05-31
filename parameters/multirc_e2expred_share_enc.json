@@ -1,0 +1,64 @@
+{
+    "data_dir": "datasets/",
+    "bert_vocab": "bert-base-uncased",
+    "rebalance_approach": "resampling",
+    "dataset_name": "multirc",
+
+    "sentence_sampling_method": "whole_document",
+    "merge_evidences": 1,
+    "classes": [
+        "True",
+        "False"
+    ],
+
+    "weights_scheduler": "parabolic",
+    "epochs_total": 20,
+    "patience": 3,
+
+    "batch_size": 13,
+    "eval_batch_size": 26,
+    "max_grad_norm": 5.0,
+
+    "lr": 1e-05,
+    "min_lr":  1e-06,
+    "lr_decay": 0.5,
+    "improvement_threshold": 1e-4,
+    "cooldown": 5,
+    "weight_decay": 1e-5,
+    "lambda_init":  1e-4,
+    "lambda_min": 1e-12,
+    "lambda_max": 5.0,
+
+    "weights": {
+        "w_aux": 1.0,
+        "w_exp": 1.0,
+        "exp_lagrange_lr": 0.01,
+        "selection": 0.3,
+        "lasso": 0.0,
+        "l0_lagrange_lr": 0.01,
+        "lagrange_alpha": 0.99
+    },
+
+    "model_common": {
+        "bert_dir": "bert-base-uncased",
+        "warmup_steps": 50,
+        "use_half_precision": 0,
+        "max_length": 512,
+        "cls_head": {
+            "dropout": 0.1,
+            "dim_hidden": 256
+        }
+    },
+
+    "selector": {
+        "selector_type": "hard binary",
+        "dropout": 0.5,
+        "dependent-z": 0,
+        "exp_threshold": 0.5,
+        "dist": "kuma",
+        "soft_selection": false
+    },
+
+    "save_path": "results_wandb",
+    "share_encoder": true
+}

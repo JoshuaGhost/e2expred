@@ -121,8 +121,12 @@ def get_args():
 
     parser.add_argument('--train_on_part', type=float, default='-1')
     parser.add_argument('--decode_split', type=str, default='test')
+
+    parser.add_argument('--unit_test', action='store_true')
+
     args = parser.parse_args()
     args = vars(args)
+
     conf_fname = args['conf_fname']
     with open(conf_fname, 'r') as fin:
         training_conf = json.load(fin)
@@ -134,6 +138,7 @@ def get_args():
             training_conf['weights'][k] = v
         else:
             training_conf[k] = v
+
     training_conf["eval_batch_size"] = max(training_conf['batch_size'], training_conf['eval_batch_size'])
 
     training_conf['model_common']['num_labels'] = len(training_conf['classes'])
@@ -149,6 +154,7 @@ def get_args():
     training_conf['cls'] = cls_conf
 
     model_conf = E2ExPredConfig(training_conf)
+
     return training_conf, model_conf
 
 

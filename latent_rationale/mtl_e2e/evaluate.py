@@ -42,7 +42,7 @@ def evaluate(model:HardKumaE2E, data, tokenizer,
              weights, label_list,
              batch_size=25,
              max_length=512,
-             device=None):
+             device=None) -> defaultdict:
     """Accuracy of a model on given data set (using minibatches)"""
 
     model.eval()  # disable dropout
