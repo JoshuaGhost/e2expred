@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any, Union
 
 from sklearn.metrics import accuracy_score
 from transformers import BertTokenizer
@@ -11,6 +11,7 @@ from latent_rationale.mtl_e2e.models.components import BertClassifier, KumaSelec
 
 
 class HardKumaE2E(nn.Module):
+
     def __init__(self,
                  cfg: E2ExPredConfig,
                  tokenizer: BertTokenizer,
@@ -69,38 +70,35 @@ class HardKumaE2E(nn.Module):
                 inputs: torch.Tensor,
                 attention_masks: torch.Tensor,
                 positions: torch.Tensor,
-                query_masks: torch.Tensor=None):
+                query_masks: torch.Tensor = None):
         device = next(self.parameters()).device
 
         inputs = inputs.to(device)
         attention_masks = attention_masks.to(device)
         positions = positions.to(device)
 
-        auxiliary_cls_p, mtl_exp_output_hidden = self.bert_mtl(inputs,
-                                                               attention_masks=attention_masks,
-                                                               positions=positions)
-        soft_z = self.rationale_selector(mtl_exp_output_hidden, attention_masks).squeeze(dim=-1)
+        aux_p, exp_hidden = self.bert_mtl(inputs,
+                                          attention_masks=attention_masks,
+                                          positions=positions)
+
+        soft_z = self.rationale_selector(exp_hidden, attention_masks).squeeze(dim=-1)
         hard_z = torch.where(soft_z >= self.exp_threshold,
                              torch.ones_like(soft_z).to(device=device),
                              torch.zeros_like(soft_z).to(device=device))
-        if query_masks is not None:
-            hard_z = torch.where(query_masks.to(device=device),
-                                 torch.ones_like(soft_z).to(device=device),
-                                 hard_z)
+
         if self.training:
             hard_z = (hard_z - soft_z).detach() + soft_z
-        # else:
-        #     hard_z = torch.where(soft_z >= self.exp_threshold, torch.LongTensor([1]).to(device=device),
-        #                          torch.LongTensor([0]).to(device=device))
+
         if self.soft_selection:
             attribution_map = soft_z
         else:
             attribution_map = hard_z
+
         cls_p, _ = self.classifier(inputs,
                                    attention_masks=attention_masks,
                                    embedding_masks=attribution_map,
                                    positions=positions)
-        return auxiliary_cls_p, cls_p, soft_z, hard_z
+        return aux_p, cls_p, soft_z, hard_z
 
     def get_loss(
             self, p_aux, p_cls, t_cls, p_exp, t_exp, mask: torch.Tensor, weights, epoch=None
@@ -122,14 +120,8 @@ class HardKumaE2E(nn.Module):
             # https://arxiv.org/abs/1912.02413
             decay_classifier = (float(epoch - 1) / self.epochs_total) ** 2
             decay_identifier = 1 - decay_classifier
-            # w_aux *= decay_identifier
-            # w_exp *= decay_identifier
-            # w_cls *= decay_classifier
         else:
             decay_identifier, decay_classifier = 1., 1.
-            # w_aux = weights['aux']
-            # w_exp = weights['exp']
-            # w_cls = weights['cls']
 
         loss_aux = self.auxilliary_criterion(p_aux, t_cls).mean()
         optional['aux_acc'] = accuracy_score(t_cls.cpu(), p_aux.cpu().argmax(axis=-1).detach())
@@ -138,17 +130,18 @@ class HardKumaE2E(nn.Module):
 
         loss_exp = self.exp_criterion(p_exp, t_exp).mean()
         optional["exp_loss"] = loss_exp.item()
+
         eps = 1e-10
-        optional['exp_p'] = (
-                    ((p_exp > self.exp_threshold).type(torch.long) * t_exp).sum(-1) / (p_exp.sum(-1) + eps)).mean()
-        optional['exp_r'] = (
-                    ((p_exp > self.exp_threshold).type(torch.long) * t_exp).sum(-1) / (t_exp.sum(-1) + eps)).mean()
+        positive = (p_exp > self.exp_threshold).type(torch.long)
+        true = t_exp
+        optional['exp_p'] = ((positive * true).sum(-1) / (positive.sum(-1) + eps)).mean()
+        optional['exp_r'] = ((positive * true).sum(-1) / (true.sum(-1) + eps)).mean()
         optional['exp_f1'] = 2. / (1. / (optional['exp_p'] + eps) + 1. / (optional['exp_r'] + eps))
+
         if self.lambda_exp > 0.:
-            # The exp loss is now considered as a Lagrangian constrain.
-            # we now follow the steps Algorithm 1 (page 7) of this paper:
+            # The exp loss is now considered as a Lagrangian constraint.
+            # Optimization follows Algorithm 1 (page 7) in this paper:
             # https://arxiv.org/abs/1810.00597
-            # to enforce the exp constraint as low as possible
 
             # moving average of the constraint
             self.loss_exp_ma = lagrange_alpha * self.loss_exp_ma + \
@@ -158,15 +151,14 @@ class HardKumaE2E(nn.Module):
             loss_exp_reg = loss_exp + (self.loss_exp_ma.item() - loss_exp.item())
 
             # update lambda_exp
-            self.lambda_exp = self.lambda_exp * torch.exp(
-                exp_lagrange_lr * loss_exp_reg.detach())
+            self.lambda_exp = self.lambda_exp * torch.exp(exp_lagrange_lr * loss_exp_reg.detach())
             self.lambda_exp = self.lambda_exp.clamp(self.lambda_min, self.lambda_max)
 
             with torch.no_grad():
                 optional["loss_exp_reg"] = loss_exp_reg.item()  # same as moving average
                 optional["lambda_exp"] = self.lambda_exp.item()
                 optional["lagrangian_exp"] = (self.lambda_exp * loss_exp).item()
-            loss += self.lambda_exp.item() * decay_identifier * loss_exp_reg
+            loss += w_exp * self.lambda_exp.item() * decay_identifier * loss_exp_reg
 
         loss_cls = self.final_cls_criterion(p_cls, t_cls).mean()
         optional['cls_acc'] = accuracy_score(t_cls.cpu(), p_cls.cpu().argmax(axis=-1).detach())

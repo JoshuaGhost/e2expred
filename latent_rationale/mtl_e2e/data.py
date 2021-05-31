@@ -118,7 +118,7 @@ class MTLDataLoader(DataLoader):
             padding = torch.zeros(pad_len).type(torch.int)
 
             input = torch.cat([cls_token, q, sep_token, d, padding])
-            exp_labels = torch.cat([torch.ones(query_len + 2).type(torch.int),
+            exp_labels = torch.cat([torch.zeros(query_len + 2).type(torch.int),
                                     exp_labels, padding])
             position_ids = torch.cat([torch.arange(0, query_len + 1),
                                       torch.arange(0, doc_len + 1),
