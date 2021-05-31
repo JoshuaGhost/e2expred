@@ -59,7 +59,8 @@ class E2ExPredConfig(Config):
         # self.min_lr = conf['min_lr']
         # self.lr_decay = conf['lr_decay']
 
-        self.lambda_init = conf['lambda_init']
+        self.l0_lambda_init = conf['l0_lambda_init']
+        self.exp_lambda_init = conf['exp_lambda_init']
         self.lambda_min = conf['lambda_min']
         self.lambda_max = conf['lambda_max']
 

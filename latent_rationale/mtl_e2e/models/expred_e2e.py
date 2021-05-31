@@ -56,10 +56,16 @@ class HardKumaE2E(nn.Module):
             state_dict = torch.load(cfg.cls_conf.pretrained_model_dir)
             self.classifier.bert_model.load_state_dict(state_dict)
 
-        lambda_init = cfg.lambda_init
-        self.register_buffer('lambda_exp', torch.full((1,), lambda_init))
-        self.register_buffer('lambda1', torch.full((1,), lambda_init))
+        exp_lambda_init = cfg.exp_lambda_init
+        l0_lambda_init = cfg.l0_lambda_init
+        self.register_buffer('lambda_exp', torch.full((1,), exp_lambda_init))
+        # self.register_buffer('lambda1', torch.full((1,), lambda_init))
         self.register_buffer('loss_exp_ma', torch.full((1,), 0.))  # moving average of exp_loss
+        self.register_buffer('c1_ma', torch.full((1,), 0.))
+
+        self.register_buffer('lambda0', torch.full((1,), l0_lambda_init))
+        # self.register_buffer('lambda1', torch.full((1,), lambda_init))
+        self.register_buffer('c0_ma', torch.full((1,), 0.))  # moving average
         self.register_buffer('c1_ma', torch.full((1,), 0.))
 
     @classmethod
@@ -104,12 +110,15 @@ class HardKumaE2E(nn.Module):
             self, p_aux, p_cls, t_cls, p_exp, t_exp, mask: torch.Tensor, weights, epoch=None
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         optional = {}
-        # selection = weights['selection']
-        # lasso = weights['lasso']
         lagrange_alpha = weights['lagrange_alpha']
         exp_lagrange_lr = weights['exp_lagrange_lr']
-        # batch_size = mask.size(0)
-        # lengths = mask.sum(1).float()  # [B]
+
+        l0_lagrange_lr = weights['l0_lagrange_lr']
+        selection = weights['selection']
+        lasso = weights['lasso']
+        batch_size = mask.size(0)
+        mask = mask.cuda()
+        lengths = mask.sum(1).float()  # [B]
 
         w_aux = weights.get('w_aux', 1.)
         w_exp = weights.get('w_exp', 1.)
@@ -159,69 +168,70 @@ class HardKumaE2E(nn.Module):
                 optional["lambda_exp"] = self.lambda_exp.item()
                 optional["lagrangian_exp"] = (self.lambda_exp * loss_exp).item()
             loss += w_exp * self.lambda_exp.item() * decay_identifier * loss_exp_reg
+        else:
+            loss += w_exp * decay_identifier * loss_exp
 
         loss_cls = self.final_cls_criterion(p_cls, t_cls).mean()
         optional['cls_acc'] = accuracy_score(t_cls.cpu(), p_cls.cpu().argmax(axis=-1).detach())
         optional["cls_loss"] = loss_cls.item()
         loss += w_cls * decay_classifier * loss_cls
 
-        # z_dists = self.rationale_selector.z_dists
+        z_dists = self.rationale_selector.z_dists
 
         # pre-compute for regularizers: pdf(0.)
-        # if len(z_dists) == 1:
-        #     pdf0 = z_dists[0].pdf(0.)
-        # else:
-        #     pdf0 = []
-        #     for t in range(len(z_dists)):
-        #         pdf_t = z_dists[t].pdf(0.)
-        #         pdf0.append(pdf_t)
-        #     pdf0 = torch.stack(pdf0, dim=1)  # [B, T, 1]
-        #
-        # pdf0 = pdf0.squeeze(-1)
-        # pdf0 = torch.where(mask, pdf0, pdf0.new_zeros([1]))  # [B, T]
-        #
-        # # L0 regularizer
-        # pdf_nonzero = 1. - pdf0  # [B, T]
-        # pdf_nonzero = torch.where(mask, pdf_nonzero, pdf_nonzero.new_zeros([1]))
+        if len(z_dists) == 1:
+            pdf0 = z_dists[0].pdf(0.)
+        else:
+            pdf0 = []
+            for t in range(len(z_dists)):
+                pdf_t = z_dists[t].pdf(0.)
+                pdf0.append(pdf_t)
+            pdf0 = torch.stack(pdf0, dim=1)  # [B, T, 1]
 
-        # if self.lambda0 > 0.:
-        # if False:
-        #     l0 = pdf_nonzero.sum(1) / (lengths + 1e-9)  # [B]
-        #     l0 = l0.sum() / batch_size
-        #
-        #     # `l0` now has the expected selection rate for this mini-batch
-        #     # we now follow the steps Algorithm 1 (page 7) of this paper:
-        #     # https://arxiv.org/abs/1810.00597
-        #     # to enforce the constraint that we want l0 to be not higher
-        #     # than `selection` (the target sparsity rate)
-        #
-        #     # lagrange dissatisfaction, batch average of the constraint
-        #     c0_hat = (l0 - selection)
-        #
-        #     # moving average of the constraint
-        #     self.c0_ma = lagrange_alpha * self.c0_ma + \
-        #                  (1 - lagrange_alpha) * c0_hat.item()
-        #
-        #     # compute smoothed constraint (equals moving average c0_ma)
-        #     c0 = c0_hat + (self.c0_ma.detach() - c0_hat.detach())
-        #
-        #     # update lambda
-        #     self.lambda0 = self.lambda0 * torch.exp(
-        #         l0_lagrange_lr * c0.detach())
-        #     self.lambda0 = self.lambda0.clamp(self.lambda_min, self.lambda_max)
-        #
-        #     with torch.no_grad():
-        #         optional["cost0_l0"] = l0.item()
-        #         optional["target_selection"] = selection
-        #         optional["c0_hat"] = c0_hat.item()
-        #         optional["c0"] = c0.item()  # same as moving average
-        #         optional["lambda0"] = self.lambda0.item()
-        #         optional["lagrangian0"] = (self.lambda0 * c0_hat).item()
-        #         optional["a"] = z_dists[0].a.mean().item()
-        #         optional["b"] = z_dists[0].b.mean().item()
-        #
-        #     loss = loss + self.lambda0.detach() * c0
-        #
+        pdf0 = pdf0.squeeze(-1)
+        pdf0 = torch.where(mask.type(torch.bool), pdf0, pdf0.new_zeros([1]))  # [B, T]
+
+        # L0 regularizer
+        pdf_nonzero = 1. - pdf0  # [B, T]
+        pdf_nonzero = torch.where(mask.type(torch.bool), pdf_nonzero, pdf_nonzero.new_zeros([1]))
+
+        if self.lambda0 > 0.:
+            l0 = pdf_nonzero.sum(1) / (lengths + 1e-9)  # [B]
+            l0 = l0.sum() / batch_size
+
+            # `l0` now has the expected selection rate for this mini-batch
+            # we now follow the steps Algorithm 1 (page 7) of this paper:
+            # https://arxiv.org/abs/1810.00597
+            # to enforce the constraint that we want l0 to be not higher
+            # than `selection` (the target sparsity rate)
+
+            # lagrange dissatisfaction, batch average of the constraint
+            c0_hat = (l0 - selection)
+
+            # moving average of the constraint
+            self.c0_ma = lagrange_alpha * self.c0_ma + \
+                         (1 - lagrange_alpha) * c0_hat.item()
+
+            # compute smoothed constraint (equals moving average c0_ma)
+            c0 = c0_hat + (self.c0_ma.detach() - c0_hat.detach())
+
+            # update lambda
+            self.lambda0 = self.lambda0 * torch.exp(
+                l0_lagrange_lr * c0.detach())
+            self.lambda0 = self.lambda0.clamp(self.lambda_min, self.lambda_max)
+
+            with torch.no_grad():
+                optional["cost0_l0"] = l0.item()
+                optional["target_selection"] = selection
+                optional["c0_hat"] = c0_hat.item()
+                optional["c0"] = c0.item()  # same as moving average
+                optional["lambda0"] = self.lambda0.item()
+                optional["lagrangian0"] = (self.lambda0 * c0_hat).item()
+                optional["a"] = z_dists[0].a.mean().item()
+                optional["b"] = z_dists[0].b.mean().item()
+
+            loss = loss + self.lambda0.detach() * c0
+
         # if lasso > 0.:
         #     # fused lasso (coherence constraint)
         #

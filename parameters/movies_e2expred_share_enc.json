@@ -11,7 +11,7 @@
         "POS"
     ],
 
-    "weights_scheduler": "static",
+    "weights_scheduler": "parabolic",
     "epochs_total": 20,
     "patience": 3,
 
@@ -25,7 +25,8 @@
     "improvement_threshold": 1e-4,
     "cooldown": 5,
     "weight_decay": 1e-5,
-    "lambda_init":  1e-4,
+    "exp_lambda_init": 1e-4,
+    "l0_lambda_init":  1e-4,
     "lambda_min": 1e-12,
     "lambda_max": 5.0,
 
