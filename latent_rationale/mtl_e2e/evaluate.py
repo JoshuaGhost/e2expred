@@ -42,7 +42,8 @@ def evaluate(model:HardKumaE2E, data, tokenizer,
              weights, label_list,
              batch_size=25,
              max_length=512,
-             device=None) -> defaultdict:
+             device=None,
+             tolerance=0) -> defaultdict:
     """Accuracy of a model on given data set (using minibatches)"""
 
     model.eval()  # disable dropout
@@ -87,7 +88,8 @@ def evaluate(model:HardKumaE2E, data, tokenizer,
             loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels,
                                                  hard_exp_pred, exp_labels.data,
                                                  mask=attention_masks,
-                                                 weights=weights)
+                                                 weights=weights,
+                                                 tolerance=tolerance)
 
             results['loss'] += loss.item() * batch_size
             for k, v in loss_optional.items():

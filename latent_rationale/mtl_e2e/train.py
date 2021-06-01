@@ -23,7 +23,7 @@ from latent_rationale.common.eraser_utils import convert_to_eraser_json, load_er
 from latent_rationale.mtl_e2e.data import MTLDataLoader
 from latent_rationale.mtl_e2e.evaluate import evaluate
 from latent_rationale.mtl_e2e.models.expred_e2e import HardKumaE2E
-from latent_rationale.mtl_e2e.utils import get_args#, bert_input_preprocess, numerify_labels, tokenize_query_doc
+from latent_rationale.mtl_e2e.utils import get_args  # , bert_input_preprocess, numerify_labels, tokenize_query_doc
 from latent_rationale.mtl_e2e.predict import predict
 
 device = get_device()
@@ -53,6 +53,7 @@ def train(model, conf):
     best_eval_iter = 0
     best_eval_loss = 1.0e9
     weights = conf['weights']
+    tolerance = conf['tolerance']
 
     model = model.to(device)
 
@@ -87,11 +88,11 @@ def train(model, conf):
                 final_dev_eval = evaluate(
                     model, dev_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
-                    max_length=max_length, device=device)
+                    max_length=max_length, device=device, tolerance=tolerance)
                 test_eval = evaluate(
                     model, test_data, tokenizer, weights, label_id_to_name,
                     batch_size=eval_batch_size,
-                    max_length=max_length, device=device)
+                    max_length=max_length, device=device, tolerance=tolerance)
 
                 wandb.log({'best_eval_iter': best_eval_iter,
                            'final_dev': final_dev_eval,
@@ -154,7 +155,7 @@ def train(model, conf):
                                                                          query_masks=query_masks)
             loss, loss_optional = model.get_loss(aux_pred_p, cls_pred_p, cls_labels,
                                                  soft_exp_pred, exp_labels.data,
-                                                 attention_masks, weights, epoch)
+                                                 attention_masks, weights, tolerance=tolerance, epoch=epoch)
             # wandb.log({'training':{'loss':loss,
             #                        'loss_optional': loss_optional}})
             epoch_train_loss += loss.item()
@@ -172,9 +173,9 @@ def train(model, conf):
             if iter_i % conf["print_every"] == 0:
                 epoch_train_loss = epoch_train_loss / conf["print_every"]
                 # writer.add_scalar('train/loss', train_loss, iter_i)
-                wandb.log({'train':{'loss':epoch_train_loss,
-                                    'iter_i': iter_i}})
-                epoch_optional_loss = {k: v/conf['print_every'] for k, v in epoch_optional_loss.items()}
+                wandb.log({'train': {'loss': epoch_train_loss,
+                                     'iter_i': iter_i}})
+                epoch_optional_loss = {k: v / conf['print_every'] for k, v in epoch_optional_loss.items()}
                 wandb.log(
                     {
                         'train': {
@@ -264,14 +265,14 @@ if __name__ == "__main__":
     dataset_name = training_conf['dataset_name']
     unit_test = training_conf.get('unit_test', False)
 
-    wandb.init(name=f'e2expred on {dataset_name} {"unit_test " if unit_test else ""}(GECO)',
+    wandb.init(name=f'e2expred on {dataset_name} {"unit_test " if unit_test else ""}'
+                    f'(GECO l0={model_conf.weights["selection"]}, kappa={training_conf["tolerance"]})',
                entity='explainable-nlp',
                project=f'e2expred{"-unit_test" if unit_test else ""}')
     wandb.config.update(training_conf)
 
     save_path = os.path.join(training_conf['save_path'], dataset_name)
     os.makedirs(save_path, exist_ok=True)
-
 
     label_id_to_name = training_conf['classes']
     decode_split = training_conf['decode_split']

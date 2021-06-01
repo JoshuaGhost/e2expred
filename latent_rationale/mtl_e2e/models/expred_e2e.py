@@ -107,7 +107,12 @@ class HardKumaE2E(nn.Module):
         return aux_p, cls_p, soft_z, hard_z
 
     def get_loss(
-            self, p_aux, p_cls, t_cls, p_exp, t_exp, mask: torch.Tensor, weights, epoch=None
+            self,
+            p_aux, p_cls, t_cls,
+            p_exp, t_exp,
+            mask: torch.Tensor,
+            weights, tolerance:float=0,
+            epoch=None
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         optional = {}
         lagrange_alpha = weights['lagrange_alpha']
@@ -140,6 +145,8 @@ class HardKumaE2E(nn.Module):
         loss_exp = self.exp_criterion(p_exp, t_exp).mean()
         optional["exp_loss"] = loss_exp.item()
 
+        soft_loss_exp = loss_exp - tolerance
+
         eps = 1e-10
         positive = (p_exp > self.exp_threshold).type(torch.long)
         true = t_exp
@@ -154,10 +161,10 @@ class HardKumaE2E(nn.Module):
 
             # moving average of the constraint
             self.loss_exp_ma = lagrange_alpha * self.loss_exp_ma + \
-                               (1 - lagrange_alpha) * loss_exp.item()
+                               (1 - lagrange_alpha) * soft_loss_exp.item()
 
             # compute smoothed constraint (equals moving average loss_exp_ma)
-            loss_exp_reg = loss_exp + (self.loss_exp_ma.item() - loss_exp.item())
+            loss_exp_reg = soft_loss_exp + (self.loss_exp_ma.item() - soft_loss_exp.item())
 
             # update lambda_exp
             self.lambda_exp = self.lambda_exp * torch.exp(exp_lagrange_lr * loss_exp_reg.detach())
@@ -166,10 +173,10 @@ class HardKumaE2E(nn.Module):
             with torch.no_grad():
                 optional["loss_exp_reg"] = loss_exp_reg.item()  # same as moving average
                 optional["lambda_exp"] = self.lambda_exp.item()
-                optional["lagrangian_exp"] = (self.lambda_exp * loss_exp).item()
+                optional["lagrangian_exp"] = (self.lambda_exp * soft_loss_exp).item()
             loss += w_exp * self.lambda_exp.item() * decay_identifier * loss_exp_reg
         else:
-            loss += w_exp * decay_identifier * loss_exp
+            loss += w_exp * decay_identifier * soft_loss_exp
 
         loss_cls = self.final_cls_criterion(p_cls, t_cls).mean()
         optional['cls_acc'] = accuracy_score(t_cls.cpu(), p_cls.cpu().argmax(axis=-1).detach())

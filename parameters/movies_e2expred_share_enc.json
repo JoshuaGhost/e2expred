@@ -26,6 +26,7 @@
     "cooldown": 5,
     "weight_decay": 1e-5,
     "exp_lambda_init": 1e-4,
+    "tolerance": 0.2,
     "l0_lambda_init":  1e-4,
     "lambda_min": 1e-12,
     "lambda_max": 5.0,
@@ -34,7 +35,7 @@
         "w_aux": 1.0,
         "w_exp": 1.0,
         "exp_lagrange_lr": 0.01,
-        "selection": 0.3,
+        "selection": 0.4,
         "lasso": 0.0,
         "l0_lagrange_lr": 0.01,
         "lagrange_alpha": 0.99
