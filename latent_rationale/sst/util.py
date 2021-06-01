@@ -337,8 +337,11 @@ def get_args():
                         help="learning rate for lagrange")
     parser.add_argument('--lagrange_alpha', type=float, default=0.99,
                         help="alpha for computing the running average")
-    parser.add_argument('--lambda_init', type=float, default=1e-4,
-                        help="initial value for lambda")
+    parser.add_argument('--exp_lambda_init', type=float, default=1e-4,
+                        help="initial value for lambda for l0 regularization")
+
+    parser.add_argument('--l0_lambda_init', type=float, default=1e-4,
+                        help="initial value for lambda for explanation")
 
     # misc
     parser.add_argument('--word_vectors', type=str,

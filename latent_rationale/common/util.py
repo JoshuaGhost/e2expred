@@ -44,7 +44,7 @@ def get_encoder(layer, in_features, hidden_size, bidirectional=True):
         raise ValueError("Unknown layer")
 
 
-def get_z_stats(z=None, mask=None):
+def get_z_stats(z:torch.Tensor=None, mask:torch.Tensor=None):
     """
     Computes statistics about how many zs are
     exactly 0, continuous (between 0 and 1), or exactly 1.
@@ -54,7 +54,8 @@ def get_z_stats(z=None, mask=None):
     :return:
     """
 
-    z = torch.where(mask, z, z.new_full([1], 1e2))
+    device = z.device
+    z = torch.where(mask.type(torch.bool).to(device=device), z, z.new_full([1], 1e2))
 
     num_0 = (z == 0.).sum().item()
     num_c = ((z > 0.) & (z < 1.)).sum().item()

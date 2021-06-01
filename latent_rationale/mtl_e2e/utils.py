@@ -1,9 +1,11 @@
 import argparse
 import json
 from dataclasses import dataclass
-from typing import List, Any
+from typing import List, Any, Dict
+
+import copy
 import torch
-import numpy as np
+from latent_rationale.mtl_e2e.config import E2ExPredConfig
 
 from torch.nn.utils.rnn import pad_sequence, PackedSequence, pack_padded_sequence, pad_packed_sequence
 from transformers import BertTokenizer
@@ -48,9 +50,8 @@ class PaddedSequence:
             batch_lengths = torch.LongTensor([len(x) for x in data])
         return PaddedSequence(padded, batch_lengths, batch_first).to(device=device)
 
-    #@classmethod
-    #def autopad(cls, data, len_queries, max_length, batch_first, device):
-
+    # @classmethod
+    # def autopad(cls, data, len_queries, max_length, batch_first, device):
 
     def pack_other(self, data: torch.Tensor):
         return pack_padded_sequence(data, self.batch_sizes, batch_first=self.batch_first, enforce_sorted=False)
@@ -90,7 +91,7 @@ class PaddedSequence:
     def unpad(self, other: torch.Tensor) -> List[torch.Tensor]:
         out = []
         for o, bl in zip(other, self.batch_sizes):
-            out.append(torch.cat((o[:bl], torch.zeros(max(0, bl-len(o))))))
+            out.append(torch.cat((o[:bl], torch.zeros(max(0, bl - len(o))))))
         return out
 
     def flip(self) -> 'PaddedSequence':
@@ -102,20 +103,16 @@ def get_args():
     parser.add_argument('--conf_fname', type=str)
 
     parser.add_argument('--dataset_name', type=str, choices=['movies', 'fever', 'multirc', 'short_movies'])
-    parser.add_argument('--data_dir', type=str, default='')
-    parser.add_argument('--save_path', type=str, default='mtl_e2e/default')
-    parser.add_argument('--resume_snapshot', type=bool, default=True)
+    parser.add_argument('--data_dir', type=str)
+    parser.add_argument('--save_path', type=str)
+    parser.add_argument('--resume_snapshot', action='store_true')
     parser.add_argument('--warm_start_mtl', type=str)
     parser.add_argument('--warm_start_cls', type=str)
-    parser.add_argument('--share_encoder', default=False, action='store_true')
+    parser.add_argument('--share_encoder', type=bool)
 
     parser.add_argument('--print_every', type=int, default=100)
     parser.add_argument('--eval_every', type=int, default=-1)
     parser.add_argument('--save_every', type=int, default=-1)
-
-    # rationale settings for HardKuma model
-    # parser.add_argument('--selection', type=float, default=1.,
-    #                     help="Target text selection rate for Lagrange.")
 
     parser.add_argument('--w_aux', type=float)
     parser.add_argument('--w_exp', type=float)
@@ -124,27 +121,47 @@ def get_args():
 
     parser.add_argument('--train_on_part', type=float, default='-1')
     parser.add_argument('--decode_split', type=str, default='test')
+
+    parser.add_argument('--unit_test', action='store_true')
+
     args = parser.parse_args()
     args = vars(args)
+
     conf_fname = args['conf_fname']
     with open(conf_fname, 'r') as fin:
-        conf = json.load(fin)
-    print(args.keys())
-    for k, v in args.items(): # values in args overwrites the ones on conf file
+        training_conf = json.load(fin)
+
+    for k, v in args.items():  # values in args overwrites the ones on conf file
         if v is None:
             continue
         if k in ('selection', 'w_aux', 'w_exp'):
-            conf['weights'][k] = v
+            training_conf['weights'][k] = v
         else:
-            conf[k] = v
-    conf["eval_batch_size"] = max(conf['batch_size'], conf['eval_batch_size'])
-    return conf
+            training_conf[k] = v
+
+    training_conf["eval_batch_size"] = max(training_conf['batch_size'], training_conf['eval_batch_size'])
+
+    training_conf['model_common']['num_labels'] = len(training_conf['classes'])
+
+    mtl_conf = copy.deepcopy(training_conf['model_common'])
+    if 'mtl' in training_conf:
+        mtl_conf.update(training_conf['mtl'])
+    training_conf['mtl'] = mtl_conf
+
+    cls_conf = copy.deepcopy(training_conf['model_common'])
+    if 'cls' in training_conf:
+        cls_conf.update(training_conf['cls'])
+    training_conf['cls'] = cls_conf
+
+    model_conf = E2ExPredConfig(training_conf)
+
+    return training_conf, model_conf
 
 
-def prepare_minibatch(mb: List[Example],
-                      tokenizer: BertTokenizer,
-                      max_length: int=512,
-                      device: str=None):
+def bert_input_preprocess(examples: List[Example],
+                          tokenizer: BertTokenizer,
+                          max_length: int = 512,
+                          device: str = None):
     """
     Minibatch is a list of examples.
     This function converts words to IDs and returns
@@ -153,87 +170,55 @@ def prepare_minibatch(mb: List[Example],
     cls_token_id = tokenizer.cls_token_id
     sep_token_id = tokenizer.sep_token_id
     pad_token_id = tokenizer.pad_token_id
-    cls_token = torch.tensor([cls_token_id])#.to(device=device)
-    sep_token = torch.tensor([sep_token_id])#.to(device=device)
+    cls_token = torch.tensor([cls_token_id])  # .to(device=device)
+    sep_token = torch.tensor([sep_token_id])  # .to(device=device)
     inputs = []
     exps = []
     labels = []
     position_ids = []
-    for inst in mb:
+    for inst in examples:
         q = inst.query
         d = inst.tokens
         exp = inst.token_labels
         labels.append(inst.label)
         if len(q) + len(d) + 2 > max_length:
-            # d = torch.Tensor(d[:(max_length - len(q) - 2)]).type_as(cls_token)
-            # exp = torch.Tensor(exp[:(max_length - len(q) - 2)])
             d = d[:(max_length - len(q) - 2)]
             exp = exp[:(max_length - len(q) - 2)]
-        # q = torch.Tensor(q).type_as(cls_token)
-        # print(cls_token.__class__, q.__class__, exp.__class__)
-        # print(cls_token.type(), q.type(), exp.type())
         inputs.append(torch.cat([cls_token, q, sep_token, d]))
         exps.append(torch.cat([torch.Tensor([0] * (len(q) + 2)), exp]))
         position_ids.append(torch.tensor(list(range(0, len(q) + 1)) + list(range(0, len(d) + 1))))  # tokens
-        # positions are counted from 1, the two 0s are for [cls] and [sep], [pad]s are also nominated as pos 0
+        # positions starts from 1, the two 0s are for [cls] and [sep], [pad]s are also nominated as pos 0
 
     inputs = PaddedSequence.autopad(inputs, batch_first=True, padding_value=pad_token_id, device=device)
     positions = PaddedSequence.autopad(position_ids, batch_first=True, padding_value=0, device=device)
     exps = PaddedSequence.autopad(exps, batch_first=True, padding_value=0, device=device)
-    attention_masks = inputs.mask(on=1., off=-1000.).type(torch.float).to(device=device)
-    padding_masks = inputs.mask(on=1., off=0.).type(torch.bool).to(device=device)
+    attention_masks = inputs.mask(on=1, off=0).type(torch.float).to(device=device)
     labels = torch.LongTensor(labels).to(device=device)
-    return inputs, exps, labels, positions, attention_masks, padding_masks
+    return inputs, exps, labels, positions, attention_masks
 
 
-    #
-    #
-    # queries, documents, exps, labels = [], [], [], []
-    # for inst in mb:
-    #     q = inst.query
-    #     queries.append(torch.Tensor(q))
-    #     documents.append(torch.Tensor(inst.tokens))
-    #     exps.append(torch.cat(torch.Tensor([0] * (len(q) + 2))inst.token_labels))
-    #     labels.append(torch.Tensor([inst.label]))
-    #
-    # return queries, documents, exps, labels
+# def numerify_labels(dataset, labels_mapping):
+#     for exp_id, exp in enumerate(dataset):
+#         dataset[exp_id] = Example(tokens=exp.tokens,
+#                                   label=labels_mapping[exp.label],
+#                                   token_labels=exp.token_labels,
+#                                   query=exp.query,
+#                                   ann_id=exp.ann_id,
+#                                   docid=exp.docid)
+#     return dataset
 
 
-# def prepare_for_input(example: Example,
-#                       max_length: int,
-#                       tokenizer: BertTokenizer,
-#                       device: str = 'cpu'):
-#     q = example.query
-#     d = example.tokens
-#     cls_token = [tokenizer.cls_token_id]
-#     sep_token = [tokenizer.sep_token_id]
-#     pad_token_id = tokenizer.pad_token_id
-#     if len(q) + len(d) + 2 > max_length:
-#         d = d[:(max_length - len(q) - 2)]
-#     input = torch.cat([cls_token, q, sep_token, d])
-#     selector_mask_starts = torch.Tensor([len(q) + 2]).to(device)
-#     input = PaddedSequence.autopad(input, batch_first=True, padding_value=pad_token_id,
-#                                    device=device)
-#     attention_mask = input.mask(on=1., off=0., device=device)
-#     attributes = [0] * (len(example.query) + 2) + example.tokens
-#     return [input, attributes, example.label]
+def numerify_label(ann:Example, labels_mapping):
+    return Example(tokens=ann.tokens,
+                   label=labels_mapping[ann.label],
+                   token_labels=ann.token_labels,
+                   query=ann.query,
+                   ann_id=ann.ann_id,
+                   docid=ann.docid)
+    # return dataset
 
 
-def numerify_labels(dataset, labels_mapping):
-    for exp_id, exp in enumerate(dataset):
-        # print(exp_id)
-        # print(dataset[exp_id])
-        # print(exp)
-        dataset[exp_id] = Example(tokens=exp.tokens,
-                                  label=labels_mapping[exp.label],
-                                  token_labels=exp.token_labels,
-                                  query=exp.query,
-                                  ann_id=exp.ann_id,
-                                  docid=exp.docid)
-    return dataset
-
-
-def tokenize_query_doc(example: Example, tokenizer: Any):
+def tokenize_query_doc(example: Example, labels_mapping: Dict[str, int], tokenizer: Any):
     if isinstance(tokenizer, BertTokenizer):
         query_tokens = tokenizer.encode(example.query, add_special_tokens=False)
     else:
@@ -248,17 +233,17 @@ def tokenize_query_doc(example: Example, tokenizer: Any):
         tokens.extend(token_pieces)
         token_labels.extend([token_label] * len(token_pieces))
     if isinstance(tokenizer, BertTokenizer):
-        return Example(query=torch.LongTensor(query_tokens),#.type(torch.long),
-                       tokens=torch.LongTensor(tokens),#.type(torch.long),
+        return Example(query=torch.LongTensor(query_tokens),  # .type(torch.long),
+                       tokens=torch.LongTensor(tokens),  # .type(torch.long),
                        token_labels=torch.Tensor(token_labels),
-                       label=torch.Tensor([example.label]),
+                       label=torch.Tensor([labels_mapping[example.label]]),
                        ann_id=example.ann_id,
                        docid=example.docid)
     else:
         return Example(query=query_tokens,
                        tokens=tokens,
                        token_labels=token_labels,
-                       label=example.label,
+                       label=labels_mapping[example.label],
                        ann_id=example.ann_id,
                        docid=example.docid)
 
